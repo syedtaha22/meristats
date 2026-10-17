@@ -1,0 +1,10 @@
+# Copy to meristats.toml and edit. meristats.toml holds machine paths and is not committed.
+
+engine_repo = "/path/to/meridian"
+data_dir = "/path/to/data/meristats"
+cache_dir = "/path/to/cache/meristats"
+fastchess = "/path/to/fastchess"
+stockfish = "/path/to/stockfish"
+
+# Number of worker processes. There is no default.
+workers = 1

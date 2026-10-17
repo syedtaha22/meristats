@@ -1,0 +1,9 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# The worktree of branch site, and the machine settings
+site-build/
+meristats.toml
