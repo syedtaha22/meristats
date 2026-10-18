@@ -4,21 +4,34 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meristats"
-version = "0.0.1"
+dynamic = ["version"]
 description = "Tests and published results for the Meridian chess engine."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "GPL-3.0-or-later" }
-dependencies = []
+dependencies = [
+    "chess==1.11.2",
+    "numpy==2.5.4",
+    "pyarrow==26.0.0",
+    "zstandard==0.25.0",
+]
 
 [project.optional-dependencies]
 test = ["pytest==9.1.1"]
+train = ["torch==2.14.1"]
 
 [project.scripts]
 meristats = "meristats.cli:main"
 
+[tool.setuptools.dynamic]
+version = { attr = "meristats.__version__" }
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+meristats = ["static/*", "templates/*", "migrations/*", "cmake/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["slow: needs an engine repository, named by MERISTATS_ENGINE_REPO"]

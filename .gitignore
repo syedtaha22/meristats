@@ -7,3 +7,12 @@ __pycache__/
 # The worktree of branch site, and the machine settings
 site-build/
 meristats.toml
+meristats-*.toml
+
+# Local material, not tracked
+temp/
+
+# Tool output
+.coverage
+.pytest_cache/
+.ruff_cache/
