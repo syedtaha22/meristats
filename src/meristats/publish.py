@@ -89,11 +89,12 @@ PROTOCOL_TEXT = {
     ),
     "match": (
         "Match",
-        1,
+        2,
         [
             "Two engines play pairs of games from the openings of the book 8moves_v3 (the two "
             "games of an opening swap the colors), with one thread and a hash of 16 MB, at a "
-            "fixed time per move, depth or node count.",
+            "fixed time per move, depth or node count. A move that takes up to 20 ms longer than "
+            "its time per move is not lost on time.",
             "The sequential test (SPRT) has Elo bounds 0 and 10 and error probabilities 0.05, on "
             "the pentanomial counts of the pairs. The verdicts of meristats and of fastchess are "
             "both stored.",
@@ -111,7 +112,7 @@ PROTOCOL_TEXT = {
     ),
     "ladder": (
         "Rating against Stockfish",
-        1,
+        2,
         [
             "The engine plays Stockfish 19 at several levels (UCI_LimitStrength and UCI_Elo), and "
             "the rating is fitted from all levels together, with the levels as fixed ratings.",

@@ -34,9 +34,10 @@ from meristats.preflight import Check, require
 from meristats.store import Store
 
 PROTOCOL = "match"
-VERSION = 1
+VERSION = 2
 LADDER = "ladder"
-LADDER_VERSION = 1
+LADDER_VERSION = 2
+TIME_MARGIN_MS = 20
 ROUNDS = 1500
 VERDICT = re.compile(r"SPRT \(\[[^]]*\]\) completed - (H[01]) was accepted")
 
@@ -65,6 +66,17 @@ class Limit:
         return (
             f"{self.kind}={self.value:g}" if self.kind == "st" else f"{self.kind}={int(self.value)}"
         )
+
+    def arguments(self) -> list[str]:
+        """
+        The arguments of `-each`. A move that takes up to `TIME_MARGIN_MS` longer than its time is
+        not lost on time, because an engine that searches for the whole time overshoots it by a
+        millisecond or two.
+        """
+        if self.kind == "st":
+            return [self.argument(), f"timemargin={TIME_MARGIN_MS}"]
+
+        return [self.argument()]
 
 
 @dataclass(frozen=True)
@@ -129,7 +141,7 @@ def build_command(
 
     command += [
         "-each",
-        limit.argument(),
+        *limit.arguments(),
         "-openings",
         f"file={book}",
         "format=pgn",

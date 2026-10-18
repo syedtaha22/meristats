@@ -545,3 +545,32 @@ def test_each_side_can_play_with_its_own_network_file(
     assert f"option.EvalFile={network.resolve()}" in args
     assert limits["eval_files"] == {"a": hashlib.sha256(b"network").hexdigest()}
     assert "EvalFile" in limits["options_a"] and "EvalFile" not in limits["options_b"]
+
+
+def test_a_timed_match_allows_a_margin_and_the_others_do_not():
+    assert Limit("st", 0.05).arguments() == ["st=0.05", "timemargin=20"]
+    assert Limit("depth", 4).arguments() == ["depth=4"]
+    assert Limit("nodes", 20000).arguments() == ["nodes=20000"]
+
+
+def test_the_margin_is_a_separate_argument_of_each(
+    fake_fastchess, tmp_path, config, store, oracle, book, framework_repo
+):
+    fastchess = fake_fastchess(["1-0", "0-1"] * 2)
+    a, b = engines(store, oracle)
+    protocol.run(
+        match_config(config, fastchess),
+        store,
+        a,
+        b,
+        book,
+        Limit("st", 0.05),
+        rounds=2,
+        sprt=None,
+        framework=framework_repo,
+        progress=lambda t: None,
+    )
+    words = Path(os.environ["FAKE_ARGS_FILE"]).read_text().split()
+    index = words.index("-each")
+
+    assert words[index + 1 : index + 3] == ["st=0.05", "timemargin=20"]
