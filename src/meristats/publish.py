@@ -39,7 +39,7 @@ HOME_URL = "https://syedtaha22.github.io/"
 ASSETS = ("style.css", "site.js", "logo.svg", "favicon.svg")
 
 PAGES = {
-    "steps": ("Step ladder", "How each step of the engine solves puzzles, and how it searches."),
+    "steps": ("Puzzles", "The share of Lichess puzzles that the engine solves under each limit."),
     "techniques": (
         "Technique comparison",
         "What switching one technique on or off changes, on the same puzzles.",

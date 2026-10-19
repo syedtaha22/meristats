@@ -667,7 +667,7 @@ def test_the_site_is_served_without_the_extension_or_a_trailing_slash(tmp_path, 
             return answer.status, answer.read().decode()
 
     try:
-        assert "Step ladder" in get("/steps")[1] and "Step ladder" in get("/steps.html")[1]
+        assert "Puzzles" in get("/steps")[1] and "Puzzles" in get("/steps.html")[1]
         assert "Protocols" in get("/protocols")[1] and "Search" in get("/")[1]
         assert get("/assets/style.css")[0] == 200
 
