@@ -272,7 +272,7 @@ def write_sample(path, puzzles):
 def fake_engine_row(store, binary):
     sha = "c" * 40
     engine_id = store.add_engine("meridian", "oracle", sha, "d" * 64, {}, 7, "Oracle 1")
-    return BuiltEngine(engine_id, sha, binary, "d" * 64, 7, 1000, "Oracle 1", {})
+    return BuiltEngine(engine_id, sha, binary, "d" * 64, 7, "Oracle 1", {})
 
 
 def answers_for(puzzles, wrong=()):

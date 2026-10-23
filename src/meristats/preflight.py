@@ -15,7 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import hashlib
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -101,7 +101,7 @@ def fingerprint(engine: BuiltEngine, depth: int = 10) -> Check:
     if engine.bench_nodes is None:
         return Check("fingerprint", False, "the engine gives no bench node count")
 
-    nodes, _ = run_bench(engine.binary, depth)
+    nodes = run_bench(engine.binary, depth)
     return Check(
         "fingerprint",
         nodes == engine.bench_nodes,
@@ -143,18 +143,3 @@ def move_overhead(options: dict, timed: bool) -> Check:
 
     value = str(options.get("MoveOverhead", ""))
     return Check("move overhead", value == "0", f"MoveOverhead {value or 'not set'}")
-
-
-def determinism(run_item: Callable[[object], object], items: Iterable[object]) -> Check:
-    """
-    Runs every item twice with `run_item` and checks that the outcomes are equal. The caller
-    gives a `run_item` that starts from fresh engine state each time.
-    """
-    items = list(items)
-    differ = [item for item in items if run_item(item) != run_item(item)]
-
-    return Check(
-        "determinism sample",
-        not differ,
-        f"{len(items)} items, {len(differ)} differ" if differ else f"{len(items)} items",
-    )

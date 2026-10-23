@@ -39,6 +39,7 @@ LADDER = "ladder"
 LADDER_VERSION = 2
 TIME_MARGIN_MS = 20
 ROUNDS = 1500
+TIMEOUT_NOTE = "meristats: stopped at the time limit"
 VERDICT = re.compile(r"SPRT \(\[[^]]*\]\) completed - (H[01]) was accepted")
 
 
@@ -349,9 +350,12 @@ def play(
     sprt: Sprt | None,
     seed: int,
     concurrency: int | None,
+    timeout: float | None = None,
 ) -> tuple[str, str]:
     """
-    Runs fastchess in `work` and returns the PGN text and the output of the program.
+    Runs fastchess in `work` and returns the PGN text and the output of the program. A run that
+    reaches `timeout` seconds is stopped, and its games so far are returned, with a line
+    `TIMEOUT_NOTE` at the end of the output.
     """
     if config.fastchess is None or not Path(config.fastchess).exists():
         raise MatchError("the settings give no fastchess program")
@@ -374,12 +378,22 @@ def play(
         log=log,
         sprt=sprt,
     )
-    done = subprocess.run(command, capture_output=True, text=True, cwd=work)
-    output = done.stdout + done.stderr
+    try:
+        done = subprocess.run(command, capture_output=True, text=True, cwd=work, timeout=timeout)
+        output = done.stdout + done.stderr
+        failed = done.returncode != 0
+    except subprocess.TimeoutExpired as expired:
+        text = [
+            part.decode(errors="replace") if isinstance(part, bytes) else part or ""
+            for part in (expired.stdout, expired.stderr)
+        ]
+        output = "".join(text) + "\n" + TIMEOUT_NOTE + "\n"
+        failed = False
+
     (work / "output.txt").write_text(output, encoding="utf-8")
 
-    if done.returncode != 0 or not pgn.exists():
-        raise MatchError(f"fastchess failed ({done.returncode}): {output[-400:]}")
+    if failed or not pgn.exists():
+        raise MatchError(f"fastchess failed: {output[-400:]}")
 
     return pgn.read_text(encoding="utf-8"), output
 
@@ -405,10 +419,12 @@ def run(
     allow_dirty: bool = False,
     framework=...,
     check_compliance: bool = True,
+    timeout: float | None = None,
     progress=lambda text: print(text, file=sys.stderr, flush=True),
 ) -> tuple[str, dict]:
     """
-    Plays engine A against engine B and stores the games and the result.
+    Plays engine A against engine B and stores the games and the result. A run that reaches
+    `timeout` seconds stops there, and the summary says `timed_out`.
 
     B is a built engine or, with `b_player`, an external program. Both sides get one thread and a
     fixed hash. A time limit gets `MoveOverhead 0` for a Meridian engine, so that `st` is the
@@ -466,6 +482,7 @@ def run(
         sprt=sprt,
         seed=seed,
         concurrency=concurrency,
+        timeout=timeout,
     )
     context.sample("end")
     games = parse_games(pgn_text)
@@ -474,6 +491,7 @@ def run(
         raise MatchError("fastchess wrote no games")
 
     summary = summarise(games, sprt, output)
+    summary["timed_out"] = TIMEOUT_NOTE in output
     progress(
         f"{summary['games']} games: +{summary['wins']} ={summary['draws']} -{summary['losses']}"
     )

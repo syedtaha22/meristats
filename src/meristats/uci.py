@@ -53,7 +53,6 @@ class Info:
     nodes: int | None = None
     score_kind: str | None = None
     score: int | None = None
-    time_ms: int | None = None
     pv: list[str] = field(default_factory=list)
 
 
@@ -80,7 +79,7 @@ def parse_info(line: str) -> Info | None:
     while index < len(words):
         key = words[index]
 
-        if key in ("depth", "nodes", "time") and index + 1 < len(words):
+        if key in ("depth", "nodes") and index + 1 < len(words):
             try:
                 number = int(words[index + 1])
             except ValueError:
@@ -88,10 +87,8 @@ def parse_info(line: str) -> Info | None:
 
             if key == "depth":
                 info.depth = number
-            elif key == "nodes":
-                info.nodes = number
             else:
-                info.time_ms = number
+                info.nodes = number
 
             index += 2
         elif key == "score" and index + 2 < len(words):

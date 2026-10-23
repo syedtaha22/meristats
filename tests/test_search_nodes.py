@@ -14,8 +14,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import io
 import json
 
+import pyarrow.parquet as pq
 import pytest
 
 from meristats import datasets
@@ -29,13 +31,36 @@ SUITE = (
 )
 
 
+def read_rows(data: bytes) -> list[Row]:
+    columns = pq.read_table(io.BytesIO(data)).to_pydict()
+    return [
+        Row(
+            *(
+                columns[name][i]
+                for name in (
+                    "config",
+                    "depth",
+                    "position",
+                    "region",
+                    "best_move",
+                    "score",
+                    "is_mate",
+                    "nodes",
+                    "wall_ms",
+                )
+            )
+        )
+        for i in range(len(columns["config"]))
+    ]
+
+
 def position(fen):
     return f"position fen {fen}"
 
 
 def fake_engine_row(store, binary):
     engine_id = store.add_engine("meridian", "oracle", "c" * 40, "d" * 64, {}, 7, "Oracle 1")
-    return BuiltEngine(engine_id, "c" * 40, binary, "d" * 64, 7, 1000, "Oracle 1", {})
+    return BuiltEngine(engine_id, "c" * 40, binary, "d" * 64, 7, "Oracle 1", {})
 
 
 def answer(nodes, move="e2e4", score=5):
@@ -69,7 +94,7 @@ def test_a_run_has_one_row_for_every_config_depth_and_position(
         progress=lambda t: None,
     )
     row = store.get_run(run_id)
-    rows = protocol.read_rows(store.get_blob(row["items_blob"]))
+    rows = read_rows(store.get_blob(row["items_blob"]))
 
     assert len(rows) == 2 * 2 * 2
     assert {(r.config, r.depth) for r in rows} == {
@@ -101,7 +126,7 @@ def test_the_rows_say_which_region_each_position_is_in(
         framework=framework_repo,
         progress=lambda t: None,
     )
-    rows = protocol.read_rows(store.get_blob(store.get_run(run_id)["items_blob"]))
+    rows = read_rows(store.get_blob(store.get_run(run_id)["items_blob"]))
 
     assert {(r.position, r.region) for r in rows} == {("ope-1", "opening"), ("end-1", "endgame")}
 
@@ -161,7 +186,7 @@ def test_the_default_config_is_recorded_as_default(config, store, oracle, suite,
         framework=framework_repo,
         progress=lambda t: None,
     )
-    rows = protocol.read_rows(store.get_blob(store.get_run(run_id)["items_blob"]))
+    rows = read_rows(store.get_blob(store.get_run(run_id)["items_blob"]))
 
     assert store.get_run(run_id)["config"] == "default"
     assert {r.config for r in rows} == {"default"}
@@ -186,7 +211,7 @@ def test_a_mate_score_is_flagged(config, store, oracle, suite, framework_repo):
         framework=framework_repo,
         progress=lambda t: None,
     )
-    rows = protocol.read_rows(store.get_blob(store.get_run(run_id)["items_blob"]))
+    rows = read_rows(store.get_blob(store.get_run(run_id)["items_blob"]))
 
     assert all(not r.is_mate for r in rows)
 
@@ -196,7 +221,7 @@ def test_rows_round_trip_through_parquet():
         Row("network", 6, "mid-1", "middlegame", "e2e4", -34, False, 12345, 1.25),
         Row("baseline", 8, "end-3", "endgame", "a1a8", 2, True, 99, 0.5),
     ]
-    back = protocol.read_rows(protocol.table(rows))
+    back = read_rows(protocol.table(rows))
 
     assert [
         (r.config, r.depth, r.position, r.best_move, r.score, r.is_mate, r.nodes) for r in back

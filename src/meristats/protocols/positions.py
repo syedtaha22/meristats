@@ -28,6 +28,7 @@ result is 1, 0.5 or 0 for White and the score is in centipawns from the side of 
 import hashlib
 import random
 import sys
+import time
 from collections import Counter
 from multiprocessing import Pool
 from pathlib import Path
@@ -186,14 +187,16 @@ def run(
     skip: int = 3,
     seed: int = 1,
     workers: int | None = None,
+    max_seconds: float | None = None,
     allow_dirty: bool = False,
     framework=...,
     progress=lambda text: print(text, file=sys.stderr, flush=True),
 ) -> tuple[str, dict]:
     """
     Plays `games` games of the engine against itself, one thread each, and writes the positions to
-    `out`, in the order of the games. The run stores the settings, the counts and the hash of the
-    file. The file itself stays where it is, because it is the size of a data set.
+    `out`, in the order of the games. With `max_seconds` the run stops when that time has passed,
+    and the games that are not finished are left out. The run stores the settings, the counts and
+    the hash of the file. The file itself stays where it is, because it is the size of a data set.
     """
     context = runner.begin(config, store, allow_dirty=allow_dirty, framework=framework)
     context.checks += runner.engine_checks(engine)
@@ -203,6 +206,7 @@ def run(
         "depth": depth,
         "random_plies": random_plies,
         "skip": skip,
+        "max_seconds": max_seconds,
         "options": options,
     }
 
@@ -215,6 +219,8 @@ def run(
     workers = workers or config.workers
     results = {1.0: 0, 0.5: 0, 0.0: 0}
     positions = 0
+    completed = 0
+    started = time.monotonic()
     digest = hashlib.sha256()
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -233,13 +239,18 @@ def run(
             digest.update(data)
             results[result] += 1
             positions += len(kept)
+            completed = done
+
+            if max_seconds is not None and time.monotonic() - started >= max_seconds:
+                pool.terminate()
+                break
 
             if done % 500 == 0:
                 progress(f"{done} games, {positions} positions")
 
     context.sample("end")
     summary = {
-        "games": games,
+        "games": completed,
         "positions": positions,
         "white_wins": results[1.0],
         "draws": results[0.5],

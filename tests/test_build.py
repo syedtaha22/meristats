@@ -71,7 +71,7 @@ def test_build_records_commit_binary_hash_and_bench_nodes(config, tiny_repo, sto
     built = build_engine(config, store, "main")
 
     assert built.commit_sha == sha
-    assert built.bench_nodes == 777 and built.bench_nps == 4000000
+    assert built.bench_nodes == 777
     assert built.version_text == "Tiny 2.0"
     assert built.binary_sha256 == file_sha256(built.binary)
     assert built.build["build_type"] == "Release"
@@ -139,8 +139,8 @@ def test_run_bench_reports_none_for_a_program_without_bench(tmp_path):
     script.write_text("#!/bin/sh\necho nothing here\n")
     script.chmod(0o755)
 
-    assert run_bench(script) == (None, None)
-    assert run_bench(tmp_path / "missing") == (None, None)
+    assert run_bench(script) is None
+    assert run_bench(tmp_path / "missing") is None
 
 
 def test_export_of_an_unknown_commit_fails_with_the_git_message(tiny_repo, tmp_path):

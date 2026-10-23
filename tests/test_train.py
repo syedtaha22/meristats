@@ -16,6 +16,7 @@
 
 import hashlib
 import json
+from pathlib import Path
 import stat
 import sys
 
@@ -62,7 +63,7 @@ def engine(tmp_path, store):
     program.write_text(f"#!{sys.executable}\n" + ENGINE)
     program.chmod(program.stat().st_mode | stat.S_IEXEC)
     row = store.add_engine("meridian", "fake", "a" * 40, "1" * 64, {}, 7, "Fake 1")
-    return BuiltEngine(row, "a" * 40, program, "1" * 64, 7, 1000, "Fake 1", {})
+    return BuiltEngine(row, "a" * 40, program, "1" * 64, 7, "Fake 1", {})
 
 
 def train(config, store, engine, framework_repo, tmp_path, **settings):
@@ -146,3 +147,28 @@ def test_a_start_network_is_recorded_by_its_hash(config, store, engine, framewor
 
     assert limits["init_sha256"] == hashlib.sha256((tmp_path / "a.nnue").read_bytes()).hexdigest()
     assert first != run_id
+
+
+def test_the_training_runs_in_the_python_that_the_settings_name(
+    config, store, engine, framework_repo, tmp_path
+):
+    from dataclasses import replace
+
+    named = replace(config, trainer_python=Path(sys.executable))
+    _, summary = train(named, store, engine, framework_repo, tmp_path)
+
+    assert summary["positions"]["kept"] == 1500
+
+
+def test_a_trainer_that_fails_is_an_error_with_its_last_lines(
+    config, store, engine, framework_repo, tmp_path
+):
+    from dataclasses import replace
+
+    broken = tmp_path / "python"
+    broken.write_text("#!/bin/sh\necho 'no torch here' >&2\nexit 3\n")
+    broken.chmod(0o755)
+    named = replace(config, trainer_python=broken)
+
+    with pytest.raises(protocol.TrainingError, match="no torch here"):
+        train(named, store, engine, framework_repo, tmp_path)

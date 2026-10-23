@@ -19,18 +19,12 @@ import pytest
 from meristats.uci import EngineCrashed, EngineError, EngineTimeout, UciEngine, parse_info
 
 
-def test_parse_info_reads_depth_score_nodes_time_and_pv():
+def test_parse_info_reads_depth_score_nodes_and_pv():
     info = parse_info(
         "info depth 12 seldepth 20 score cp -34 nodes 12345 nps 99 time 7 pv e2e4 e7e5 g1f3"
     )
 
-    assert (info.depth, info.score_kind, info.score, info.nodes, info.time_ms) == (
-        12,
-        "cp",
-        -34,
-        12345,
-        7,
-    )
+    assert (info.depth, info.score_kind, info.score, info.nodes) == (12, "cp", -34, 12345)
     assert info.pv == ["e2e4", "e7e5", "g1f3"]
 
 

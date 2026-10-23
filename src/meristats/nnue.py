@@ -21,6 +21,7 @@ The engine loads a network with the option EvalFile and refuses a file whose mag
 not match its build, so a layout that differs is found at the first load.
 """
 
+import re
 import struct
 from dataclasses import dataclass
 from pathlib import Path
@@ -328,4 +329,36 @@ def source_text(network: Network) -> str:
         + "constexpr int32_t kBuiltinOutputBias[] = {"
         + ", ".join(str(int(v)) for v in network.output_bias)
         + "};\n"
+    )
+
+
+def read_source(path: Path) -> Network:
+    """
+    Reads a network from the C++ source that `source_text` writes, the engine's
+    `src/nnue_net.inc`.
+    """
+    text = Path(path).read_text()
+
+    def numbers(name: str) -> np.ndarray:
+        found = re.search(rf"{name}\[\]\s*=\s*\{{([^}}]*)\}}", text)
+
+        if found is None:
+            raise NetworkError(f"{path} has no array {name}")
+
+        return np.array([int(v) for v in re.findall(r"-?\d+", found.group(1))], dtype=np.int64)
+
+    weights = numbers("kBuiltinFeatureWeights")
+    bias = numbers("kBuiltinFeatureBias")
+    output = numbers("kBuiltinOutputWeights")
+    output_bias = numbers("kBuiltinOutputBias")
+    hidden = bias.shape[0]
+
+    if weights.shape[0] != INPUTS * hidden or output.shape[0] != BUCKETS * 2 * hidden:
+        raise NetworkError(f"{path} has arrays that do not fit one network")
+
+    return Network(
+        weights.astype(np.int16).reshape(INPUTS, hidden),
+        bias.astype(np.int16),
+        output.astype(np.int16).reshape(BUCKETS, 2, hidden),
+        output_bias.astype(np.int32),
     )

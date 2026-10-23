@@ -33,6 +33,10 @@ is not committed, because it holds the paths of one machine.
 | `workers` | The number of worker processes. It has no default. |
 | `fastchess` | The path of fastchess, for matches. Optional. |
 | `stockfish` | The path of Stockfish, for the ladder. Optional, and `meristats fetch` can download it. |
+| `trainer_python` | The Python that has PyTorch, when it is not the Python of meristats. Optional. |
+| `lichess_user` | The Lichess account whose games the nightly cycle learns from. Optional. |
+| `networks_branch` | The branch of the engine repository that holds the networks. Default `nightly-networks`. |
+| `anchor_positions` | A data file of labelled positions that every night's training includes a sample of. Optional. |
 
 ## Commands
 
@@ -45,6 +49,7 @@ is not committed, because it holds the paths of one machine.
 | `run match` | Plays two engines against each other, with a sequential test. |
 | `run ladder` | Plays Stockfish at several levels and fits a rating. |
 | `run positions` | Plays the engine against itself and writes labelled positions. |
+| `run reanalyse` | Searches the games of the Lichess account again, deeper, and writes training data, mistakes and experience. |
 | `run train` | Trains a network from labelled positions, and checks that the engine loads it. |
 | `run job` | Builds and runs a C++ tool from `tools/` against the engine at a commit. |
 | `magics` | Finds the magic numbers of the sliders and writes them as C++ source. |
@@ -52,6 +57,10 @@ is not committed, because it holds the paths of one machine.
 | `report RUN`, `runs`, `pins` | Print a run, list the runs, list the pinned runs. |
 | `pin`, `unpin` | Put runs on a page of the site, or take them off. |
 | `publish`, `serve` | Write the site, and serve it on this computer. |
+| `lichess sync` | Stores the new games of the account in the data folder. |
+| `experience info FILE` | Prints the size of an experience file. |
+| `network source` | Writes a network file as the C++ source of the engine. |
+| `nightly` | Runs the nightly cycle. |
 | `fetch stockfish`, `fetch book` | Download Stockfish and the opening book, with their hashes checked. |
 | `backup DEST`, `verify` | Copy the data folder, and check every blob against its hash. |
 
@@ -113,6 +122,29 @@ meristats run puzzles --engine REF --nodes 20000 --eval-file net.nnue
 The last command, and `run match` with `--a-eval-file`, measure a network before it is installed
 into the engine by hand. `train_policy` and `build_book` are C++ tools, because they use the
 evaluation, the move features and the position hash of the engine.
+
+## Nightly cycle
+
+`meristats nightly` is one night of learning for the engine. It builds the engine at the head of
+`networks_branch`, which is the deployed engine, and then:
+
+1. plays the engine against itself for `--selfplay-minutes`
+2. stores the new games of `lichess_user` and searches each position of them again at
+   `--analysis-depth`, which gives quiet positions for training, the mistakes (moves that gave
+   away at least 100 centipawns) and the best moves for the experience file
+3. merges the best moves into `data_dir/experience/experience.bin`, which the engine reads with
+   its option `ExperienceFile`, keeping the deeper analysis of a position
+4. stores the night in the replay buffer, `data_dir/replay`, and writes the training file from
+   the night, a sample of the nights before it, the mistakes of all nights (three times each) and
+   a sample of `anchor_positions`
+5. trains a network that starts from the deployed one, at a low learning rate
+6. plays the new network against the deployed one at `--match-nodes` nodes a move, with a
+   sequential test
+
+The night ends with the status `passed` when the test accepts the new network, and
+`summary.json` then names `candidate` and `deployed`. The night does not change the engine
+repository. A night that reaches its `--deadline` ends with the status `late`. Every stage is a
+run in the database, and `data_dir/nightly/<night>/summary.json` holds the numbers of the night.
 
 ## Tests
 

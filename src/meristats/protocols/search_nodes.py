@@ -100,29 +100,6 @@ def table(rows: list[Row]) -> bytes:
     return buffer.getvalue()
 
 
-def read_rows(data: bytes) -> list[Row]:
-    columns = pq.read_table(io.BytesIO(data)).to_pydict()
-    return [
-        Row(
-            *(
-                columns[name][i]
-                for name in (
-                    "config",
-                    "depth",
-                    "position",
-                    "region",
-                    "best_move",
-                    "score",
-                    "is_mate",
-                    "nodes",
-                    "wall_ms",
-                )
-            )
-        )
-        for i in range(len(columns["config"]))
-    ]
-
-
 def summarise(rows: list[Row]) -> dict:
     """
     For each configuration and depth: the mean nodes and mean time per move, and the speed in

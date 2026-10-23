@@ -41,6 +41,10 @@ class Config:
     workers: int
     fastchess: Path | None = None
     stockfish: Path | None = None
+    trainer_python: Path | None = None
+    lichess_user: str | None = None
+    networks_branch: str = "nightly-networks"
+    anchor_positions: Path | None = None
 
 
 def _path(value: str) -> Path:
@@ -89,4 +93,8 @@ def load(path: Path | None = None) -> Config:
         workers=workers,
         fastchess=_path(raw["fastchess"]) if raw.get("fastchess") else None,
         stockfish=_path(raw["stockfish"]) if raw.get("stockfish") else None,
+        trainer_python=_path(raw["trainer_python"]) if raw.get("trainer_python") else None,
+        lichess_user=raw.get("lichess_user") or None,
+        networks_branch=raw.get("networks_branch", "nightly-networks"),
+        anchor_positions=_path(raw["anchor_positions"]) if raw.get("anchor_positions") else None,
     )

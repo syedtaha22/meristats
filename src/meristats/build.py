@@ -30,7 +30,6 @@ from meristats.uci import UciEngine
 
 BENCH_DEPTH = 10
 NODES = re.compile(r"Nodes searched\s*:\s*(\d+)")
-SPEED = re.compile(r"Nodes/second\s*:\s*(\d+)")
 
 
 class BuildError(Exception):
@@ -46,7 +45,6 @@ class BuiltEngine:
     binary: Path
     binary_sha256: str
     bench_nodes: int | None
-    bench_nps: int | None
     version_text: str
     build: dict
 
@@ -97,18 +95,18 @@ def export_source(repo: Path, sha: str, destination: Path) -> None:
 
 def run_bench(binary: Path, depth: int = BENCH_DEPTH, timeout: float = 600.0):
     """
-    Runs `binary bench <depth>` and returns the nodes and the speed it reports, None for a
-    value that is missing from the output (an engine without `bench`).
+    Runs `binary bench <depth>` and returns the nodes it reports, None when they are missing from
+    the output (an engine without `bench`).
     """
     try:
         done = subprocess.run(
             [str(binary), "bench", str(depth)], capture_output=True, text=True, timeout=timeout
         )
     except (OSError, subprocess.TimeoutExpired):
-        return None, None
+        return None
 
-    nodes, speed = NODES.search(done.stdout), SPEED.search(done.stdout)
-    return (int(nodes.group(1)) if nodes else None, int(speed.group(1)) if speed else None)
+    nodes = NODES.search(done.stdout)
+    return int(nodes.group(1)) if nodes else None
 
 
 def _cache_value(cache_file: Path, key: str) -> str:
@@ -190,7 +188,7 @@ def build_engine(
         "cmake_version": _first_line(["cmake", "--version"]),
     }
 
-    nodes, speed = run_bench(binary, bench_depth)
+    nodes = run_bench(binary, bench_depth)
 
     with UciEngine(binary) as engine:
         version_text = engine.name
@@ -205,4 +203,4 @@ def build_engine(
             )
 
     engine_id = store.add_engine("meridian", "meridian", sha, digest, build, nodes, version_text)
-    return BuiltEngine(engine_id, sha, binary, digest, nodes, speed, version_text, build)
+    return BuiltEngine(engine_id, sha, binary, digest, nodes, version_text, build)

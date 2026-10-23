@@ -16,12 +16,14 @@
 
 import argparse
 import importlib
+import json
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from meristats import __version__, datasets, external
+from meristats import __version__, datasets, experience, external, lichess, nightly, nnue
 from meristats.build import BuildError, build_engine
 from meristats.config import Config, ConfigError, load
 from meristats.protocols import experiment as experiment_protocol
@@ -30,6 +32,7 @@ from meristats.protocols import ladder as ladder_protocol
 from meristats.protocols import match as match_protocol
 from meristats.protocols import positions as positions_protocol
 from meristats.protocols import puzzles as puzzles_protocol
+from meristats.protocols import reanalyse as reanalyse_protocol
 from meristats.protocols import train as train_protocol
 from meristats.protocols import rules as rules_protocol
 from meristats.protocols import search_nodes as search_nodes_protocol
@@ -263,6 +266,7 @@ def _run_match(args, config: Config, store: Store) -> int:
         seed=args.seed,
         allow_dirty=args.allow_dirty,
         check_compliance=not args.no_compliance,
+        timeout=args.timeout,
     )
     print(run_id)
     print(
@@ -331,6 +335,7 @@ def _run_positions(args, config: Config, store: Store) -> int:
         skip=args.skip,
         seed=args.seed,
         workers=args.workers,
+        max_seconds=args.max_seconds,
         allow_dirty=args.allow_dirty,
     )
     print(run_id)
@@ -340,6 +345,100 @@ def _run_positions(args, config: Config, store: Store) -> int:
         f"sha256 {summary['output']['sha256'][:16]}"
     )
     return 0
+
+
+def _user(args, config: Config) -> str:
+    user = getattr(args, "user", None) or config.lichess_user
+
+    if not user:
+        raise lichess.LichessError("no account: pass --user or set lichess_user in the settings")
+
+    return user
+
+
+def _run_reanalyse(args, config: Config, store: Store) -> int:
+    user = _user(args, config)
+    games = lichess.stored(lichess.games_file(config.data_dir, user))
+
+    if args.limit:
+        games = games[-args.limit :]
+
+    engine = build_engine(config, store, args.engine)
+    out = args.out or config.cache_dir / "reanalysis" / engine.commit_sha[:12]
+    run_id, summary = reanalyse_protocol.run(
+        config,
+        store,
+        engine,
+        games,
+        user,
+        out,
+        depth=args.depth,
+        mistake_cp=args.mistake_cp,
+        engine_config=args.engine_config,
+        eval_file=args.eval_file,
+        workers=args.workers,
+        allow_dirty=args.allow_dirty,
+    )
+    print(run_id)
+    print(
+        f"{summary['analysed']} games, {summary['positions']} quiet positions, "
+        f"{summary['mistakes']} mistakes, mean loss {summary['mean_loss_cp']:.0f} cp, "
+        f"{summary['experience']} experience positions"
+    )
+    print(f"files in {out}")
+    worst = sorted(
+        json.loads((Path(out) / "mistakes.json").read_text()), key=lambda m: -m["loss_cp"]
+    )
+
+    for mistake in worst[:15]:
+        print(
+            f"  game {mistake['game']} ply {mistake['ply']}: played {mistake['played']}, "
+            f"best {mistake['best']}, loss {mistake['loss_cp']} cp"
+        )
+
+    return 0
+
+
+def _deadline(text: str) -> float:
+    """
+    The next time of day `HH:MM`, as a time from `time.time()`.
+    """
+    hour, minute = (int(part) for part in text.split(":"))
+    now = datetime.now()
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+    if target <= now:
+        target += timedelta(days=1)
+
+    return target.timestamp()
+
+
+def _nightly(args, config: Config, store: Store) -> int:
+    settings = nightly.Settings(
+        deadline=_deadline(args.deadline),
+        night=args.night,
+        selfplay_minutes=args.selfplay_minutes,
+        selfplay_depth=args.selfplay_depth,
+        selfplay_skip=args.selfplay_skip,
+        anchor_lines=args.anchor_lines,
+        history_lines=args.history_lines,
+        mistake_repeat=args.mistake_repeat,
+        analysis_minutes=args.analysis_minutes,
+        analysis_depth=args.analysis_depth,
+        epochs=args.epochs,
+        lr=args.lr,
+        match_nodes=args.match_nodes,
+        match_minutes=args.match_minutes,
+        rounds=args.rounds,
+        elo0=args.elo0,
+        elo1=args.elo1,
+        seed=args.seed,
+        allow_dirty=args.allow_dirty,
+    )
+    summary = nightly.run(config, store, settings, book=_book(config, None))
+    print(nightly.format_summary(summary))
+    print(f"summary: {Path(config.data_dir) / 'nightly' / summary['night'] / 'summary.json'}")
+    return 1 if summary["status"] == "failed" else 0
 
 
 def _run_train(args, config: Config, store: Store) -> int:
@@ -563,6 +662,44 @@ def build_parser() -> argparse.ArgumentParser:
     fetch_parser = commands.add_parser("fetch", help="download Stockfish or the opening book")
     fetch_parser.add_argument("what", choices=["stockfish", "book"])
 
+    lichess_parser = commands.add_parser("lichess", help="the games of an account")
+    lichess_parser.add_argument("action", choices=["sync"])
+    lichess_parser.add_argument("--user")
+    experience_parser = commands.add_parser("experience", help="an experience file")
+    experience_parser.add_argument("action", choices=["info"])
+    experience_parser.add_argument("file", type=Path)
+    network_parser = commands.add_parser("network", help="a network file")
+    network_parser.add_argument("action", choices=["source"])
+    network_parser.add_argument("network", type=Path, help="the network file")
+    network_parser.add_argument("--out", type=Path, required=True, help="the C++ file to write")
+    nightly_parser = commands.add_parser("nightly", help="run the nightly cycle")
+    nightly_parser.add_argument("--deadline", default="07:00", help="HH:MM, the next one (07:00)")
+    nightly_parser.add_argument("--night", default="", help="a name for the night (the date)")
+    nightly_parser.add_argument("--selfplay-minutes", type=float, default=60)
+    nightly_parser.add_argument("--selfplay-depth", type=int, default=9)
+    nightly_parser.add_argument(
+        "--selfplay-skip", type=int, default=3, help="keep a position every N plies"
+    )
+    nightly_parser.add_argument("--analysis-minutes", type=float, default=30)
+    nightly_parser.add_argument("--analysis-depth", type=int, default=12)
+    nightly_parser.add_argument("--epochs", type=int, default=4)
+    nightly_parser.add_argument("--lr", type=float, default=0.0002)
+    nightly_parser.add_argument(
+        "--anchor-lines", type=int, default=1_000_000, help="positions of the anchor data"
+    )
+    nightly_parser.add_argument(
+        "--history-lines", type=int, default=1_500_000, help="positions of the nights before"
+    )
+    nightly_parser.add_argument(
+        "--mistake-repeat", type=int, default=3, help="how often each mistake is in the data"
+    )
+    nightly_parser.add_argument("--match-nodes", type=int, default=50000)
+    nightly_parser.add_argument("--match-minutes", type=float, default=120)
+    nightly_parser.add_argument("--rounds", type=int, default=nightly.Settings.rounds)
+    nightly_parser.add_argument("--elo0", type=float, default=0.0)
+    nightly_parser.add_argument("--elo1", type=float, default=10.0)
+    nightly_parser.add_argument("--seed", type=int, default=1)
+    nightly_parser.add_argument("--allow-dirty", action="store_true")
     run_parser = commands.add_parser("run", help="run a protocol")
     protocols = run_parser.add_subparsers(dest="protocol", required=True)
 
@@ -621,6 +758,7 @@ def build_parser() -> argparse.ArgumentParser:
     match.add_argument("--seed", type=int, default=1)
     match.add_argument("--book", type=Path)
     match.add_argument("--no-compliance", action="store_true")
+    match.add_argument("--timeout", type=float, help="stop after this many seconds")
     match.add_argument("--allow-dirty", action="store_true")
 
     positions = protocols.add_parser("positions", help="play the engine against itself for data")
@@ -634,7 +772,22 @@ def build_parser() -> argparse.ArgumentParser:
     positions.add_argument("--skip", type=int, default=3, help="keep a position every N plies")
     positions.add_argument("--seed", type=int, default=1)
     positions.add_argument("--workers", type=int)
+    positions.add_argument("--max-seconds", type=float, help="stop after this many seconds")
     positions.add_argument("--allow-dirty", action="store_true")
+
+    reanalyse = protocols.add_parser(
+        "reanalyse", help="search the games of the account again, deeper"
+    )
+    reanalyse.add_argument("--engine", required=True)
+    reanalyse.add_argument("--user", help="the account; the default is lichess_user")
+    reanalyse.add_argument("--depth", type=int, default=12)
+    reanalyse.add_argument("--limit", type=int, default=0, help="only the newest N games")
+    reanalyse.add_argument("--mistake-cp", type=int, default=reanalyse_protocol.MISTAKE_CP)
+    reanalyse.add_argument("--out", type=Path, help="the folder for the files")
+    reanalyse.add_argument("--engine-config")
+    reanalyse.add_argument("--eval-file", type=Path)
+    reanalyse.add_argument("--workers", type=int)
+    reanalyse.add_argument("--allow-dirty", action="store_true")
 
     train = protocols.add_parser("train", help="train a network from labelled positions")
     train.add_argument("--engine", required=True, help="the engine that has to accept the network")
@@ -725,6 +878,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 RUNNERS = {
+    "reanalyse": _run_reanalyse,
     "positions": _run_positions,
     "train": _run_train,
     "experiment": _run_experiment,
@@ -809,6 +963,22 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"bench   {built.bench_nodes} nodes")
             elif args.command == "run":
                 return RUNNERS[args.protocol](args, config, store)
+            elif args.command == "lichess":
+                user = _user(args, config)
+                new = lichess.sync(config.data_dir, user)
+                total = len(lichess.stored(lichess.games_file(config.data_dir, user)))
+                print(f"{len(new)} new games of {user}, {total} stored")
+            elif args.command == "experience":
+                entries = experience.read(args.file)
+                depths = sorted(depth for _, _, depth in entries.values())
+                print(f"{len(entries)} positions")
+
+                if depths:
+                    print(f"depth {depths[0]} to {depths[-1]}, median {depths[len(depths) // 2]}")
+            elif args.command == "network":
+                args.out.write_text(nnue.source_text(nnue.read_network(args.network)))
+            elif args.command == "nightly":
+                return _nightly(args, config, store)
             elif args.command == "pin":
                 if args.label and len(args.run_ids) > 1:
                     raise ReportError("--label names one run, so pin several runs without it")
@@ -879,6 +1049,12 @@ def main(argv: list[str] | None = None) -> int:
         search_nodes_protocol.RoundsDisagree,
         job_protocol.JobError,
         EngineError,
+        lichess.LichessError,
+        nnue.NetworkError,
+        nightly.NightlyError,
+        reanalyse_protocol.ReanalyseError,
+        train_protocol.TrainingError,
+        experience.ExperienceError,
     ) as error:
         print(f"meristats: {error}", file=sys.stderr)
         return 1

@@ -144,7 +144,7 @@ def book(tmp_path):
 def built(store, oracle):
     program = oracle({})
     engine_id = store.add_engine("meridian", "oracle", "a" * 40, "1" * 64, {}, 7, "Oracle 1")
-    return BuiltEngine(engine_id, "a" * 40, program, "1" * 64, 7, 1000, "Oracle 1", {})
+    return BuiltEngine(engine_id, "a" * 40, program, "1" * 64, 7, "Oracle 1", {})
 
 
 def test_a_run_stores_every_iteration_and_the_tuned_preset(

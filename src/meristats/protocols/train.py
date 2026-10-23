@@ -21,11 +21,15 @@ network itself. The engine of the run has to accept the network as its EvalFile.
 """
 
 import hashlib
+import json
+import os
+import subprocess
 import sys
-import time
+from collections import deque
 from pathlib import Path
 
-from meristats import nnue, runner, training
+import meristats
+from meristats import nnue, runner
 from meristats.build import BuiltEngine
 from meristats.config import Config
 from meristats.preflight import Check, require
@@ -34,6 +38,12 @@ from meristats.uci import UciEngine
 
 PROTOCOL = "train"
 VERSION = 1
+
+
+class TrainingError(RuntimeError):
+    """
+    The worker of the training failed.
+    """
 
 
 def file_digest(path: Path) -> str:
@@ -67,6 +77,56 @@ def engine_accepts(engine: BuiltEngine, network: Path) -> Check:
         loaded and bool(move),
         "loaded and searched" if loaded and move else f"replies: {replies}",
     )
+
+
+def run_worker(
+    config: Config,
+    data: Path,
+    out: Path,
+    result: Path,
+    settings: dict,
+    progress,
+) -> dict:
+    """
+    Runs the worker of the training in the Python of the trainer, which is the Python of meristats
+    unless the settings name another, and returns the numbers that it wrote. The lines that the
+    worker prints go to `progress`.
+    """
+    python = str(config.trainer_python or sys.executable)
+    source = str(Path(meristats.__file__).resolve().parent.parent)
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = os.pathsep.join(
+        part for part in (source, environment.get("PYTHONPATH")) if part
+    )
+    command = [
+        python,
+        "-m",
+        "meristats.train_worker",
+        "--data",
+        str(data),
+        "--out",
+        str(out),
+        "--result",
+        str(result),
+    ]
+
+    for name, value in settings.items():
+        if value is not None:
+            command += [f"--{name.replace('_', '-')}", str(value)]
+
+    last: deque[str] = deque(maxlen=12)
+
+    with subprocess.Popen(command, env=environment, stderr=subprocess.PIPE, text=True) as process:
+        for line in process.stderr:
+            last.append(line.rstrip())
+            progress(line.rstrip())
+
+    if process.returncode != 0 or not result.exists():
+        raise TrainingError(
+            f"the trainer ({python}) failed with status {process.returncode}: " + " | ".join(last)
+        )
+
+    return json.loads(result.read_text())
 
 
 def run(
@@ -105,34 +165,7 @@ def run(
         digest,
         {"file": Path(data).name, "bytes": Path(data).stat().st_size},
     )
-    start = nnue.read_network(init) if init is not None else None
     context.sample("before")
-    stamp = time.monotonic()
-    positions = training.read_dataset(
-        data, lam=lam, max_score=max_score, limit=limit, workers=workers or config.workers
-    )
-    loading = time.monotonic() - stamp
-    progress(f"{len(positions)} positions read in {loading:.1f}s")
-    log: list[str] = []
-
-    def say(text: str) -> None:
-        log.append(text)
-        progress(text)
-
-    result = training.train(
-        positions,
-        epochs=epochs,
-        batch=batch,
-        lr=lr,
-        seed=seed,
-        init=start,
-        device=device,
-        log=say,
-        seconds_loading=loading,
-    )
-    import torch
-
-    context.sample("end")
     folder = (
         Path(out).parent
         if out
@@ -140,43 +173,58 @@ def run(
     )
     folder.mkdir(parents=True, exist_ok=True)
     path = Path(out) if out else folder / "net.nnue"
-    nnue.write_network(result.network, path)
+    result = run_worker(
+        config,
+        data,
+        path,
+        folder / "train-result.json",
+        {
+            "epochs": epochs,
+            "batch": batch,
+            "lr": lr,
+            "lam": lam,
+            "max_score": max_score,
+            "limit": limit,
+            "seed": seed,
+            "workers": workers or config.workers,
+            "init": init,
+            "device": device,
+        },
+        progress,
+    )
+    log = result["log"]
+    context.sample("end")
 
     if source is not None:
-        Path(source).write_text(nnue.source_text(result.network))
+        Path(source).write_text(nnue.source_text(nnue.read_network(path)))
 
     network_bytes = path.read_bytes()
     context.checks += require([engine_accepts(engine, path)])
     network_blob = store.put_blob(network_bytes, "network", path.name)
     log_blob = store.put_blob("\n".join(log).encode(), "tool-log", "train.log")
-    held = [e["held"] for e in result.epochs]
+    held = [e["held"] for e in result["epochs"]]
     summary = {
-        "positions": {
-            "read": positions.read,
-            "kept": len(positions),
-            "skipped": positions.skipped,
-            "held_out": int(positions.held.sum()),
-        },
-        "best_held": result.best_held,
+        "positions": result["positions"],
+        "best_held": result["best_held"],
         "best_epoch": held.index(min(held)) + 1,
-        "epochs": result.epochs,
+        "epochs": result["epochs"],
         "seconds": {
-            "loading": result.seconds_loading,
-            "training": result.seconds_training,
-            "per_epoch": result.seconds_training / max(1, len(result.epochs)),
+            "loading": result["seconds_loading"],
+            "training": result["seconds_training"],
+            "per_epoch": result["seconds_training"] / max(1, len(result["epochs"])),
         },
         "quantized": {
-            "mean_difference_cp": result.quantized_difference,
-            "mean_magnitude_cp": result.quantized_magnitude,
-            "positions": result.checked,
+            "mean_difference_cp": result["quantized_difference"],
+            "mean_magnitude_cp": result["quantized_magnitude"],
+            "positions": result["checked"],
         },
         "network": {
             "sha256": hashlib.sha256(network_bytes).hexdigest(),
             "bytes": len(network_bytes),
             "path": str(path),
         },
-        "device": result.device,
-        "torch": torch.__version__,
+        "device": result["device"],
+        "torch": result["torch"],
     }
     limits = {
         "epochs": epochs,
@@ -185,7 +233,7 @@ def run(
         "lambda": lam,
         "max_score": max_score,
         "limit": limit,
-        "hidden": result.network.hidden,
+        "hidden": result["hidden"],
         "data_sha256": digest,
         "init_sha256": None if init is None else file_digest(init),
     }

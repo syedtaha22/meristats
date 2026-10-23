@@ -292,3 +292,29 @@ def test_a_board_with_too_many_squares_or_a_wrong_piece_is_refused():
     for fen in ("9/8/8/8/8/8/8/8 w - - 0 1", "8/8/8/8/8/8/8/8/8 w - - 0 1", "x7/8/8/8/8/8/8/8 w"):
         with pytest.raises((ValueError, IndexError)):
             nnue.parse_board(fen)
+
+
+def test_a_network_is_read_back_from_its_source_text(tmp_path):
+    rng = np.random.default_rng(4)
+    network = nnue.Network(
+        rng.integers(-300, 300, (nnue.INPUTS, nnue.HIDDEN), dtype=np.int16),
+        rng.integers(-300, 300, nnue.HIDDEN, dtype=np.int16),
+        rng.integers(-300, 300, (nnue.BUCKETS, 2, nnue.HIDDEN), dtype=np.int16),
+        rng.integers(-9000, 9000, nnue.BUCKETS, dtype=np.int32),
+    )
+    path = tmp_path / "net.inc"
+    path.write_text(nnue.source_text(network))
+    read = nnue.read_source(path)
+
+    assert np.array_equal(read.feature_weights, network.feature_weights)
+    assert np.array_equal(read.feature_bias, network.feature_bias)
+    assert np.array_equal(read.output_weights, network.output_weights)
+    assert np.array_equal(read.output_bias, network.output_bias)
+
+
+def test_a_source_without_the_arrays_is_refused(tmp_path):
+    path = tmp_path / "bad.inc"
+    path.write_text("constexpr int x = 1;\n")
+
+    with pytest.raises(nnue.NetworkError):
+        nnue.read_source(path)

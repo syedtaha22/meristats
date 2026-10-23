@@ -17,6 +17,7 @@
 import dataclasses
 import json
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -232,8 +233,8 @@ def engines(store, oracle):
     a = store.add_engine("meridian", "oracle", "a" * 40, "1" * 64, {}, 7, "Oracle 1")
     b = store.add_engine("meridian", "oracle", "b" * 40, "2" * 64, {}, 7, "Oracle 1")
     return (
-        BuiltEngine(a, "a" * 40, program, "1" * 64, 7, 1000, "Oracle 1", {}),
-        BuiltEngine(b, "b" * 40, program, "2" * 64, 7, 1000, "Oracle 1", {}),
+        BuiltEngine(a, "a" * 40, program, "1" * 64, 7, "Oracle 1", {}),
+        BuiltEngine(b, "b" * 40, program, "2" * 64, 7, "Oracle 1", {}),
     )
 
 
@@ -574,3 +575,27 @@ def test_the_margin_is_a_separate_argument_of_each(
     index = words.index("-each")
 
     assert words[index + 1 : index + 3] == ["st=0.05", "timemargin=20"]
+
+
+def test_a_match_that_reaches_its_time_limit_returns_the_games_so_far(config, tmp_path, book):
+    program = tmp_path / "slow-fastchess"
+    program.write_text("#!/bin/sh\nprintf '[Event \"x\"]\\n\\n1. e4 *\\n' > games.pgn\nsleep 30\n")
+    program.chmod(0o755)
+    player = protocol.Player("A", Path("/bin/engine"), {}, 1)
+    started = time.monotonic()
+    pgn, output = protocol.play(
+        match_config(config, program),
+        player,
+        player,
+        Limit("nodes", 1000),
+        book,
+        tmp_path / "work",
+        rounds=10,
+        sprt=None,
+        seed=1,
+        concurrency=1,
+        timeout=0.5,
+    )
+
+    assert time.monotonic() - started < 10
+    assert pgn.startswith("[Event") and protocol.TIMEOUT_NOTE in output

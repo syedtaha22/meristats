@@ -8,3 +8,11 @@ stockfish = "/path/to/stockfish"
 
 # Number of worker processes. There is no default.
 workers = 1
+
+# The Python that has PyTorch, when it is not the Python of meristats. Optional.
+trainer_python = "/path/to/trainer/bin/python"
+
+# The nightly cycle. Optional.
+lichess_user = "ce_meridian"
+networks_branch = "nightly-networks"
+anchor_positions = "/path/to/anchor-positions.txt"

@@ -26,7 +26,7 @@ def fake_built(tmp_path, nodes_printed, nodes_recorded, sha="a" * 40):
     program = tmp_path / "prog"
     program.write_text(f"#!/bin/sh\necho 'Nodes searched  : {nodes_printed}'\n")
     program.chmod(0o755)
-    return BuiltEngine(1, sha, program, "0" * 64, nodes_recorded, None, "v", {})
+    return BuiltEngine(1, sha, program, "0" * 64, nodes_recorded, "v", {})
 
 
 def test_require_passes_checks_through_and_raises_for_a_failed_one():
@@ -114,12 +114,3 @@ def test_one_thread_and_move_overhead():
     assert not preflight.move_overhead({"MoveOverhead": 30}, timed=True).ok
     assert not preflight.move_overhead({}, timed=True).ok
     assert preflight.move_overhead({"MoveOverhead": 30}, timed=False).ok
-
-
-def test_determinism_detects_a_changing_outcome():
-    assert preflight.determinism(lambda item: (item, item * 2), range(20)).ok
-
-    counter = iter(range(1000))
-    check = preflight.determinism(lambda item: next(counter), range(5))
-    assert not check.ok and "5 items, 5 differ" in check.detail
-    assert preflight.determinism(lambda item: item, []).ok

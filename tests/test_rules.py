@@ -33,7 +33,7 @@ def position(fen):
 
 def fake_engine_row(store, binary):
     engine_id = store.add_engine("meridian", "oracle", "c" * 40, "d" * 64, {}, 7, "Oracle 1")
-    return BuiltEngine(engine_id, "c" * 40, binary, "d" * 64, 7, 1000, "Oracle 1", {})
+    return BuiltEngine(engine_id, "c" * 40, binary, "d" * 64, 7, "Oracle 1", {})
 
 
 @pytest.fixture

@@ -99,7 +99,7 @@ def stubs(monkeypatch, config, store, framework_repo):
     Replaces the sub-protocols with recorders, and makes real runs for the experiment to name.
     """
     engine_id = store.add_engine("meridian", "m", "a" * 40, "b" * 64, {}, 5, "M")
-    engine = BuiltEngine(engine_id, "a" * 40, config.engine_repo / "x", "b" * 64, 5, 1, "M", {})
+    engine = BuiltEngine(engine_id, "a" * 40, config.engine_repo / "x", "b" * 64, 5, "M", {})
     counter = {"n": 0}
 
     def fake_run(label):

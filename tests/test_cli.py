@@ -134,7 +134,7 @@ def stubbed(monkeypatch, config_file, tiny_repo):
 
     repo, commit = tiny_repo
     commit(5)
-    engine = BuiltEngine(1, "a" * 40, repo / "meridian", "b" * 64, 5, 100, "Tiny", {})
+    engine = BuiltEngine(1, "a" * 40, repo / "meridian", "b" * 64, 5, "Tiny", {})
     monkeypatch.setattr(cli, "build_engine", lambda config, store, ref: engine)
     return monkeypatch
 
@@ -806,3 +806,22 @@ def test_the_magics_command_writes_the_source(tmp_path, monkeypatch, capsys):
     assert "kRookMagics" in (tmp_path / "m.inc").read_text()
     assert cli.main(["magics"]) == 0
     assert "kBishopMagics" in capsys.readouterr().out
+
+
+def test_a_network_is_written_as_source(config_file, tmp_path):
+    import numpy as np
+
+    from meristats import nnue
+
+    rng = np.random.default_rng(2)
+    network = nnue.Network(
+        rng.integers(-9, 9, (nnue.INPUTS, nnue.HIDDEN), dtype=np.int16),
+        rng.integers(-9, 9, nnue.HIDDEN, dtype=np.int16),
+        rng.integers(-9, 9, (nnue.BUCKETS, 2, nnue.HIDDEN), dtype=np.int16),
+        rng.integers(-9, 9, nnue.BUCKETS, dtype=np.int32),
+    )
+    file, source = tmp_path / "new.nnue", tmp_path / "nnue_net.inc"
+    nnue.write_network(network, file)
+
+    assert run_main(config_file, "network", "source", str(file), "--out", str(source)) == 0
+    assert np.array_equal(nnue.read_source(source).feature_weights, network.feature_weights)

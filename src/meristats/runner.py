@@ -14,7 +14,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -42,7 +41,6 @@ class RunContext:
     code_dirty: bool | None
     checks: list[Check]
     samples: list[dict] = field(default_factory=list)
-    started_clock: float = field(default_factory=time.monotonic)
 
     def sample(self, label: str) -> None:
         """

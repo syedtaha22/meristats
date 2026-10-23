@@ -164,7 +164,7 @@ def test_an_illegal_move_of_the_engine_is_an_error(player, tmp_path):
 
 def engine_of(store, program):
     row = store.add_engine("meridian", "player", "a" * 40, "1" * 64, {}, 7, "Player 1")
-    return BuiltEngine(row, "a" * 40, program, "1" * 64, 7, 1000, "Player 1", {})
+    return BuiltEngine(row, "a" * 40, program, "1" * 64, 7, "Player 1", {})
 
 
 def test_a_run_writes_the_games_in_order_and_records_the_file(
@@ -256,3 +256,25 @@ def test_a_run_without_positions_is_refused(config, store, player, framework_rep
             framework=framework_repo,
             progress=lambda text: None,
         )
+
+
+def test_a_run_with_a_time_limit_stops_and_counts_the_games_that_it_finished(
+    config, store, player, framework_repo, tmp_path
+):
+    out = tmp_path / "data" / "limited.txt"
+    run_id, summary = protocol.run(
+        config,
+        store,
+        engine_of(store, player()),
+        out,
+        games=100000,
+        depth=3,
+        workers=2,
+        max_seconds=1,
+        framework=framework_repo,
+        progress=lambda text: None,
+    )
+
+    assert 1 <= summary["games"] < 100000
+    assert len(out.read_text().splitlines()) == summary["positions"]
+    assert store.get_run(run_id)["status"] == "complete"
