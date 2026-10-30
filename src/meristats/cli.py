@@ -661,6 +661,10 @@ def build_parser() -> argparse.ArgumentParser:
     backup_parser = commands.add_parser("backup", help="copy the database and the blobs")
     backup_parser.add_argument("destination", type=Path)
     commands.add_parser("verify", help="check every stored blob against its hash")
+    merge_parser = commands.add_parser(
+        "merge", help="add the runs of another data folder that this one lacks"
+    )
+    merge_parser.add_argument("source", type=Path, help="the other data folder")
     publish_parser = commands.add_parser("publish", help="write the site from the pinned runs")
     publish_parser.add_argument("--out", type=Path, default=Path("site-build"))
     magics_parser = commands.add_parser("magics", help="find the magic numbers of the sliders")
@@ -1128,6 +1132,11 @@ def main(argv: list[str] | None = None) -> int:
             elif args.command == "backup":
                 store.backup(args.destination)
                 print(f"copied to {args.destination}")
+            elif args.command == "merge":
+                added = store.merge(args.source)
+                print(
+                    f"added {added['runs']} runs, {added['blobs']} blobs and {added['pins']} pins"
+                )
             elif args.command == "verify":
                 bad = store.verify_blobs()
                 print(f"{len(bad)} damaged or missing blobs")

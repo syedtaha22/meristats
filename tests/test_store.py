@@ -232,6 +232,84 @@ def test_backup_into_a_folder_with_files_is_refused(tmp_path, store):
         store.backup(tmp_path / "full")
 
 
+def _folder(path, engine_name, machine_cpu, start):
+    """
+    A data folder with one run, of an engine and a machine named as given, and one blob.
+    """
+    folder = Store(path)
+    machine = folder.add_machine({"cpu_model": machine_cpu})
+    engine = folder.add_engine(
+        kind="meridian",
+        name=engine_name,
+        commit_sha="c" * 40,
+        binary_sha256=sha256_hex(engine_name.encode()),
+        build={},
+        bench_nodes=1,
+        version_text=engine_name,
+    )
+    blob = folder.put_blob(engine_name.encode() * 50, "t")
+    run = folder.add_run(
+        **{**RUN, "engine_id": engine, "machine_id": machine, "started_utc": start},
+        items_blob=blob.sha256,
+        blobs=((blob.sha256, "pgn"),),
+    )
+    return folder, run, blob
+
+
+def test_merge_adds_the_runs_of_another_folder_with_their_own_machine_and_engine(tmp_path):
+    mine, my_run, _ = _folder(tmp_path / "a", "mine", "cpu a", "2026-10-18T05:00:00Z")
+    theirs, their_run, blob = _folder(tmp_path / "b", "theirs", "cpu b", "2026-10-19T05:00:00Z")
+    theirs.close()
+
+    added = mine.merge(tmp_path / "b")
+
+    assert added == {"runs": 1, "blobs": 1, "pins": 0}
+    merged = mine.get_run(their_run)
+    engine = mine.db.execute(
+        "SELECT name FROM engines WHERE engine_id = ?", (merged["engine_id"],)
+    ).fetchone()
+    machine = mine.db.execute(
+        "SELECT cpu_model FROM machines WHERE machine_id = ?", (merged["machine_id"],)
+    ).fetchone()
+    assert (engine["name"], machine["cpu_model"]) == ("theirs", "cpu b")
+    assert mine.get_run(my_run) is not None
+    assert mine.get_blob(blob.sha256) == b"theirs" * 50
+    assert mine.verify_blobs() == []
+
+
+def test_merge_twice_adds_nothing_the_second_time(tmp_path):
+    mine, _, _ = _folder(tmp_path / "a", "mine", "cpu a", "2026-10-18T05:00:00Z")
+    theirs, _, _ = _folder(tmp_path / "b", "theirs", "cpu b", "2026-10-19T05:00:00Z")
+    theirs.close()
+    mine.merge(tmp_path / "b")
+
+    assert mine.merge(tmp_path / "b") == {"runs": 0, "blobs": 0, "pins": 0}
+    assert len(mine.runs()) == 2
+
+
+def test_merge_takes_a_pin_unless_the_label_is_taken(tmp_path):
+    mine, my_run, _ = _folder(tmp_path / "a", "mine", "cpu a", "2026-10-18T05:00:00Z")
+    theirs, their_run, _ = _folder(tmp_path / "b", "theirs", "cpu b", "2026-10-19T05:00:00Z")
+    mine.pin("matches", "kept", my_run)
+    theirs.pin("matches", "kept", their_run)
+    theirs.pin("matches", "new", their_run)
+    theirs.close()
+
+    assert mine.merge(tmp_path / "b")["pins"] == 1
+    pinned = {(pin["label"], pin["run_id"]) for pin in mine.pins()}
+    assert pinned == {("kept", my_run), ("new", their_run)}
+
+
+def test_merge_refuses_a_folder_of_another_schema(tmp_path):
+    mine = Store(tmp_path / "a")
+    other = Store(tmp_path / "b")
+    other.db.execute("UPDATE meta SET value = '1' WHERE key = 'schema_version'")
+    other.close()
+
+    with pytest.raises(StoreError, match="schema"):
+        mine.merge(tmp_path / "b")
+
+
 def test_utc_now_is_iso_text_with_a_z():
     assert utc_now().endswith("Z") and len(utc_now()) == 20
 

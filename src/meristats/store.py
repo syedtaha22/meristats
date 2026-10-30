@@ -451,6 +451,127 @@ class Store:
             "AND q.label = p.label) ORDER BY p.page, p.label"
         ).fetchall()
 
+    # ------------------------------------------------------------------- merge
+
+    def merge(self, other_dir: Path) -> dict[str, int]:
+        """
+        Adds what the data folder `other_dir` has and this one lacks: runs with their machines,
+        engines, datasets, blobs and files, and the pins of labels that this folder does not
+        have. A run that is in both is kept as it is. The ids of machines, engines and datasets
+        are the ones of this folder. Returns the number added of each kind.
+        """
+        other_dir = Path(other_dir)
+        source = sqlite3.connect(f"file:{other_dir / 'meristats.db'}?mode=ro", uri=True)
+        source.row_factory = sqlite3.Row
+        added = {"runs": 0, "blobs": 0, "pins": 0}
+
+        try:
+            version = int(
+                source.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()[0]
+            )
+
+            if version != self.schema_version():
+                raise StoreError(
+                    f"{other_dir} has schema {version}, this folder {self.schema_version()}"
+                )
+
+            def copy(table: str, row: sqlite3.Row, skip: tuple[str, ...] = ()) -> int:
+                names = [name for name in row.keys() if name not in skip]
+                cursor = self.db.execute(
+                    f"INSERT INTO {table} ({', '.join(names)}) "
+                    f"VALUES ({', '.join('?' for _ in names)})",
+                    tuple(row[name] for name in names),
+                )
+                return cursor.lastrowid
+
+            machines, engines, datasets = {}, {}, {}
+
+            for row in source.execute("SELECT * FROM machines"):
+                known = self.db.execute(
+                    "SELECT machine_id FROM machines WHERE fingerprint = ?", (row["fingerprint"],)
+                ).fetchone()
+                machines[row["machine_id"]] = (
+                    known[0] if known else copy("machines", row, ("machine_id",))
+                )
+
+            for row in source.execute("SELECT * FROM engines"):
+                known = self.db.execute(
+                    "SELECT engine_id FROM engines WHERE kind = ? AND commit_sha IS ? "
+                    "AND binary_sha256 = ?",
+                    (row["kind"], row["commit_sha"], row["binary_sha256"]),
+                ).fetchone()
+                engines[row["engine_id"]] = (
+                    known[0] if known else copy("engines", row, ("engine_id",))
+                )
+
+            for row in source.execute("SELECT * FROM datasets"):
+                known = self.db.execute(
+                    "SELECT dataset_id FROM datasets WHERE name = ? AND sha256 = ?",
+                    (row["name"], row["sha256"]),
+                ).fetchone()
+                datasets[row["dataset_id"]] = (
+                    known[0] if known else copy("datasets", row, ("dataset_id",))
+                )
+
+            for row in source.execute("SELECT * FROM blobs"):
+                path = self._blob_path(row["sha256"])
+                known = self.db.execute(
+                    "SELECT 1 FROM blobs WHERE sha256 = ?", (row["sha256"],)
+                ).fetchone()
+                packed = other_dir / "blobs" / row["sha256"][:2] / f"{row['sha256']}.zst"
+
+                if not path.exists():
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    partial = path.parent / f".{row['sha256']}.{os.getpid()}.part"
+                    partial.write_bytes(packed.read_bytes())
+                    os.replace(partial, path)
+
+                if not known:
+                    copy("blobs", row)
+                    added["blobs"] += 1
+
+            for row in source.execute("SELECT * FROM runs ORDER BY rowid"):
+                if self.get_run(row["run_id"]) is not None:
+                    continue
+
+                values = dict(row)
+                values["machine_id"] = machines.get(row["machine_id"])
+                values["engine_id"] = engines.get(row["engine_id"])
+                values["dataset_id"] = datasets.get(row["dataset_id"])
+                names = list(values)
+                self.db.execute(
+                    f"INSERT INTO runs ({', '.join(names)}) "
+                    f"VALUES ({', '.join('?' for _ in names)})",
+                    tuple(values.values()),
+                )
+                added["runs"] += 1
+
+            for row in source.execute("SELECT * FROM run_blobs"):
+                self.db.execute(
+                    "INSERT OR IGNORE INTO run_blobs (run_id, sha256, role) VALUES (?, ?, ?)",
+                    (row["run_id"], row["sha256"], row["role"]),
+                )
+
+            have = {(pin["page"], pin["label"]) for pin in self.pins()}
+
+            for pin in source.execute(
+                "SELECT p.page, p.label, p.run_id, p.pinned_utc FROM pins p "
+                "WHERE p.run_id IS NOT NULL AND p.pin_id = (SELECT MAX(q.pin_id) FROM pins q "
+                "WHERE q.page = p.page AND q.label = p.label) ORDER BY p.pin_id"
+            ):
+                if (pin["page"], pin["label"]) in have:
+                    continue
+
+                self.db.execute(
+                    "INSERT INTO pins (page, label, run_id, pinned_utc) VALUES (?, ?, ?, ?)",
+                    (pin["page"], pin["label"], pin["run_id"], pin["pinned_utc"]),
+                )
+                added["pins"] += 1
+        finally:
+            source.close()
+
+        return added
+
     # ------------------------------------------------------------------ backup
 
     def backup(self, destination: Path) -> None:

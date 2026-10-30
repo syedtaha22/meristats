@@ -67,6 +67,7 @@ is not committed, because it holds the paths of one machine.
 | `nightly` | Runs the nightly cycle. |
 | `fetch stockfish`, `fetch book` | Download Stockfish and the opening book, with their hashes checked. |
 | `backup DEST`, `verify` | Copy the data folder, and check every blob against its hash. |
+| `merge DIR` | Add the runs, blobs and pins of another data folder that this one lacks. |
 
 A run id can be shortened to any prefix that names one run. The method of each protocol, with its
 version, is on the page Protocols of the site.
