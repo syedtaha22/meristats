@@ -74,6 +74,7 @@ class Settings:
     epochs: int = 4
     lr: float = 0.0002
     anchor_lines: int = 1_000_000
+    leela_lines: int = 1_000_000
     history_lines: int = 1_500_000
     mistake_repeat: int = 3
     match_nodes: int = 50000
@@ -100,7 +101,7 @@ def stages() -> dict[str, Callable]:
     }
 
 
-def _committed_network(repo: Path, sha: str, destination: Path) -> Path:
+def committed_network(repo: Path, sha: str, destination: Path) -> Path:
     """
     The network that is built into the engine at a commit, as a network file.
     """
@@ -156,7 +157,7 @@ def run(
     try:
         engine = do["build"](config, store, config.networks_branch)
         summary["engine"] = {"commit": engine.commit_sha, "version": engine.version_text}
-        deployed = _committed_network(
+        deployed = committed_network(
             Path(config.engine_repo), engine.commit_sha, work / "deployed.nnue"
         )
         seed = settings.seed
@@ -249,9 +250,11 @@ def run(
             buffer,
             night,
             anchor=config.anchor_positions,
+            leela=config.leela_positions,
             seed=seed,
             history_lines=settings.history_lines,
             anchor_lines=settings.anchor_lines,
+            leela_lines=settings.leela_lines,
             mistake_repeat=settings.mistake_repeat,
         )
         summary["stages"]["data"] = counts

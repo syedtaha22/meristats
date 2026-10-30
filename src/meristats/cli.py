@@ -20,16 +20,27 @@ import json
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from meristats import __version__, datasets, experience, external, lichess, nightly, nnue
-from meristats.build import BuildError, build_engine
+from meristats import (
+    __version__,
+    datasets,
+    experience,
+    external,
+    leela,
+    lichess,
+    nightly,
+    nnue,
+)
+from meristats.build import BuildError, build_engine, width_defines
 from meristats.config import Config, ConfigError, load
 from meristats.protocols import experiment as experiment_protocol
 from meristats.protocols import job as job_protocol
 from meristats.protocols import ladder as ladder_protocol
 from meristats.protocols import match as match_protocol
+from meristats.protocols import networks as networks_protocol
 from meristats.protocols import positions as positions_protocol
 from meristats.protocols import puzzles as puzzles_protocol
 from meristats.protocols import reanalyse as reanalyse_protocol
@@ -247,8 +258,8 @@ def _book(config: Config, path: Path | None) -> Path:
 
 
 def _run_match(args, config: Config, store: Store) -> int:
-    a = build_engine(config, store, args.a)
-    b = build_engine(config, store, args.b)
+    a = build_engine(config, store, args.a, defines=width_defines(args.a_hidden))
+    b = build_engine(config, store, args.b, defines=width_defines(args.b_hidden))
     sprt = None if args.no_sprt else match_protocol.Sprt(args.elo0, args.elo1)
     run_id, summary = match_protocol.run(
         config,
@@ -399,10 +410,40 @@ def _run_reanalyse(args, config: Config, store: Store) -> int:
     return 0
 
 
-def _deadline(text: str) -> float:
+def _leela(args, config: Config) -> int:
+    def say(text: str) -> None:
+        print(text, file=sys.stderr, flush=True)
+
+    if args.action == "fetch":
+        directory = args.dir or config.cache_dir / "leela" / args.run
+        paths = leela.fetch(args.run, directory, args.count, progress=say)
+        print(f"{len(paths)} tars in {directory}")
+        return 0
+
+    counts = leela.convert(
+        args.out,
+        args.tars,
+        every=args.every,
+        min_ply=args.min_ply,
+        limit_games=args.limit_games,
+        workers=args.workers or config.workers,
+        progress=say,
+    )
+    print(
+        f"{counts['games']} games, {counts['read']} positions read, {counts['kept']} kept "
+        f"in {args.out}"
+    )
+    return 0
+
+
+def _deadline(text: str, hours: float | None = None) -> float:
     """
-    The next time of day `HH:MM`, as a time from `time.time()`.
+    The time of the end of a night, as a time from `time.time()`: `hours` from now when they are
+    given, and otherwise the next time of day `HH:MM`.
     """
+    if hours is not None:
+        return time.time() + hours * 3600
+
     hour, minute = (int(part) for part in text.split(":"))
     now = datetime.now()
     target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
@@ -415,12 +456,13 @@ def _deadline(text: str) -> float:
 
 def _nightly(args, config: Config, store: Store) -> int:
     settings = nightly.Settings(
-        deadline=_deadline(args.deadline),
+        deadline=_deadline(args.deadline, args.hours),
         night=args.night,
         selfplay_minutes=args.selfplay_minutes,
         selfplay_depth=args.selfplay_depth,
         selfplay_skip=args.selfplay_skip,
         anchor_lines=args.anchor_lines,
+        leela_lines=args.leela_lines,
         history_lines=args.history_lines,
         mistake_repeat=args.mistake_repeat,
         analysis_minutes=args.analysis_minutes,
@@ -441,8 +483,23 @@ def _nightly(args, config: Config, store: Store) -> int:
     return 1 if summary["status"] == "failed" else 0
 
 
+def _run_networks(args, config: Config, store: Store) -> int:
+    spec = networks_protocol.load_spec(args.spec)
+    rows = networks_protocol.run(
+        config,
+        store,
+        spec,
+        suite=args.suite or DATASETS / "suite.txt",
+        book=_book(config, args.book),
+        allow_dirty=args.allow_dirty,
+    )
+    print(networks_protocol.format_table(rows))
+    print(f"results in {spec.folder / 'results.json'}")
+    return 0
+
+
 def _run_train(args, config: Config, store: Store) -> int:
-    engine = build_engine(config, store, args.engine)
+    engine = build_engine(config, store, args.engine, defines=width_defines(args.hidden))
     run_id, summary = train_protocol.run(
         config,
         store,
@@ -458,6 +515,7 @@ def _run_train(args, config: Config, store: Store) -> int:
         limit=args.limit,
         seed=args.seed,
         init=args.init,
+        hidden=args.hidden,
         device=args.device,
         workers=args.workers,
         allow_dirty=args.allow_dirty,
@@ -597,6 +655,9 @@ def build_parser() -> argparse.ArgumentParser:
     commands.add_parser("selftest", help="run the tests of meristats")
     build_parser_ = commands.add_parser("build", help="build the engine at a commit")
     build_parser_.add_argument("ref", help="a commit, a branch or a tag of the engine repository")
+    build_parser_.add_argument(
+        "--hidden", type=int, default=128, help="build for a network of this width"
+    )
     backup_parser = commands.add_parser("backup", help="copy the database and the blobs")
     backup_parser.add_argument("destination", type=Path)
     commands.add_parser("verify", help="check every stored blob against its hash")
@@ -665,6 +726,19 @@ def build_parser() -> argparse.ArgumentParser:
     lichess_parser = commands.add_parser("lichess", help="the games of an account")
     lichess_parser.add_argument("action", choices=["sync"])
     lichess_parser.add_argument("--user")
+    leela_parser = commands.add_parser("leela", help="the training games of Leela Chess Zero")
+    leela_actions = leela_parser.add_subparsers(dest="action", required=True)
+    leela_fetch = leela_actions.add_parser("fetch", help="download an even sample of the tars")
+    leela_fetch.add_argument("run", help="a folder of storage.lczero.org/files/training_data")
+    leela_fetch.add_argument("--count", type=int, default=20, help="how many tars (default 20)")
+    leela_fetch.add_argument("--dir", type=Path, help="where to put them (the cache folder)")
+    leela_convert = leela_actions.add_parser("convert", help="turn tars into training positions")
+    leela_convert.add_argument("out", type=Path, help="the data file to write")
+    leela_convert.add_argument("tars", nargs="+", type=Path)
+    leela_convert.add_argument("--every", type=int, default=2, help="keep a position every N plies")
+    leela_convert.add_argument("--min-ply", type=int, default=6, help="skip the first N plies")
+    leela_convert.add_argument("--limit-games", type=int, default=0, help="games of each tar")
+    leela_convert.add_argument("--workers", type=int)
     experience_parser = commands.add_parser("experience", help="an experience file")
     experience_parser.add_argument("action", choices=["info"])
     experience_parser.add_argument("file", type=Path)
@@ -674,6 +748,9 @@ def build_parser() -> argparse.ArgumentParser:
     network_parser.add_argument("--out", type=Path, required=True, help="the C++ file to write")
     nightly_parser = commands.add_parser("nightly", help="run the nightly cycle")
     nightly_parser.add_argument("--deadline", default="07:00", help="HH:MM, the next one (07:00)")
+    nightly_parser.add_argument(
+        "--hours", type=float, help="end after this many hours from now, instead of at --deadline"
+    )
     nightly_parser.add_argument("--night", default="", help="a name for the night (the date)")
     nightly_parser.add_argument("--selfplay-minutes", type=float, default=60)
     nightly_parser.add_argument("--selfplay-depth", type=int, default=9)
@@ -686,6 +763,9 @@ def build_parser() -> argparse.ArgumentParser:
     nightly_parser.add_argument("--lr", type=float, default=0.0002)
     nightly_parser.add_argument(
         "--anchor-lines", type=int, default=1_000_000, help="positions of the anchor data"
+    )
+    nightly_parser.add_argument(
+        "--leela-lines", type=int, default=1_000_000, help="positions of Leela (leela_positions)"
     )
     nightly_parser.add_argument(
         "--history-lines", type=int, default=1_500_000, help="positions of the nights before"
@@ -748,6 +828,8 @@ def build_parser() -> argparse.ArgumentParser:
     match.add_argument("--b-config")
     match.add_argument("--a-eval-file", type=Path, help="a network file for A")
     match.add_argument("--b-eval-file", type=Path, help="a network file for B")
+    match.add_argument("--a-hidden", type=int, default=128, help="the width of the network of A")
+    match.add_argument("--b-hidden", type=int, default=128, help="the width of the network of B")
     _add_limits(match)
     match.add_argument(
         "--rounds", type=int, default=match_protocol.ROUNDS, help="the most pairs of games"
@@ -789,6 +871,14 @@ def build_parser() -> argparse.ArgumentParser:
     reanalyse.add_argument("--workers", type=int)
     reanalyse.add_argument("--allow-dirty", action="store_true")
 
+    networks = protocols.add_parser(
+        "networks", help="train candidate networks of several shapes and play them"
+    )
+    networks.add_argument("spec", type=Path, help="a TOML file, see protocols/networks.py")
+    networks.add_argument("--suite", type=Path, help="the positions for the speed")
+    networks.add_argument("--book", type=Path)
+    networks.add_argument("--allow-dirty", action="store_true")
+
     train = protocols.add_parser("train", help="train a network from labelled positions")
     train.add_argument("--engine", required=True, help="the engine that has to accept the network")
     train.add_argument("--data", type=Path, required=True, help="positions, as `positions` writes")
@@ -802,6 +892,12 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--limit", type=int, default=0, help="only the first N positions")
     train.add_argument("--seed", type=int, default=1)
     train.add_argument("--init", type=Path, help="a network file to start from")
+    train.add_argument(
+        "--hidden",
+        type=int,
+        default=128,
+        help="values for each side in the first layer; the engine is built for this width",
+    )
     train.add_argument("--device", help="cuda or cpu; the default is cuda when there is one")
     train.add_argument("--workers", type=int, help="processes that read the data")
     train.add_argument("--allow-dirty", action="store_true")
@@ -878,6 +974,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 RUNNERS = {
+    "networks": _run_networks,
     "reanalyse": _run_reanalyse,
     "positions": _run_positions,
     "train": _run_train,
@@ -956,7 +1053,7 @@ def main(argv: list[str] | None = None) -> int:
 
         with Store(config.data_dir) as store:
             if args.command == "build":
-                built = build_engine(config, store, args.ref)
+                built = build_engine(config, store, args.ref, defines=width_defines(args.hidden))
                 print(f"{built.commit_sha} {built.version_text}")
                 print(f"binary  {built.binary}")
                 print(f"sha256  {built.binary_sha256}")
@@ -968,6 +1065,8 @@ def main(argv: list[str] | None = None) -> int:
                 new = lichess.sync(config.data_dir, user)
                 total = len(lichess.stored(lichess.games_file(config.data_dir, user)))
                 print(f"{len(new)} new games of {user}, {total} stored")
+            elif args.command == "leela":
+                return _leela(args, config)
             elif args.command == "experience":
                 entries = experience.read(args.file)
                 depths = sorted(depth for _, _, depth in entries.values())
@@ -1050,9 +1149,11 @@ def main(argv: list[str] | None = None) -> int:
         job_protocol.JobError,
         EngineError,
         lichess.LichessError,
+        leela.LeelaError,
         nnue.NetworkError,
         nightly.NightlyError,
         reanalyse_protocol.ReanalyseError,
+        networks_protocol.NetworksError,
         train_protocol.TrainingError,
         experience.ExperienceError,
     ) as error:

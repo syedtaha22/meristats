@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -135,7 +136,14 @@ def stubbed(monkeypatch, config_file, tiny_repo):
     repo, commit = tiny_repo
     commit(5)
     engine = BuiltEngine(1, "a" * 40, repo / "meridian", "b" * 64, 5, "Tiny", {})
-    monkeypatch.setattr(cli, "build_engine", lambda config, store, ref: engine)
+    built = []
+
+    def build(config, store, ref, defines=None):
+        built.append((ref, defines))
+        return engine
+
+    monkeypatch.setattr(cli, "build_engine", build)
+    monkeypatch.built = built
     return monkeypatch
 
 
@@ -825,3 +833,74 @@ def test_a_network_is_written_as_source(config_file, tmp_path):
 
     assert run_main(config_file, "network", "source", str(file), "--out", str(source)) == 0
     assert np.array_equal(nnue.read_source(source).feature_weights, network.feature_weights)
+
+
+def test_a_wider_network_is_trained_with_an_engine_built_for_it(stubbed, config_file, tmp_path):
+    class Recorder:
+        def __init__(self):
+            self.kwargs = None
+
+        def __call__(self, *args, **kwargs):
+            self.kwargs = kwargs
+            summary = {
+                "best_held": 0.1,
+                "best_epoch": 1,
+                "device": "cpu",
+                "seconds": {"loading": 1, "training": 1, "per_epoch": 1},
+                "network": {"path": "n", "sha256": "0" * 64},
+            }
+            return "run", summary
+
+    recorder = Recorder()
+    stubbed.setattr(cli.train_protocol, "run", recorder)
+    data = tmp_path / "d.txt"
+    data.write_text("x")
+
+    assert run_main(config_file, "run", "train", "--engine", "main", "--data", str(data)) == 0
+    assert stubbed.built[-1][1] is None and recorder.kwargs["hidden"] == 128
+    assert (
+        run_main(
+            config_file, "run", "train", "--engine", "main", "--data", str(data), "--hidden", "256"
+        )
+        == 0
+    )
+    assert stubbed.built[-1][1] == {"CHESS_NNUE_HIDDEN": "256"} and recorder.kwargs["hidden"] == 256
+
+
+def test_the_leela_command_converts_tars_and_says_how_many_positions_it_kept(
+    config_file, tmp_path, capsys
+):
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).parent))
+    import test_leela
+
+    _, raw = test_leela.game(test_leela.QUIET)
+    test_leela.write_tar(tmp_path / "a.tar", [raw, raw])
+    out = tmp_path / "out.txt"
+
+    assert (
+        run_main(
+            config_file,
+            "leela",
+            "convert",
+            str(out),
+            str(tmp_path / "a.tar"),
+            "--every",
+            "1",
+            "--min-ply",
+            "0",
+        )
+        == 0
+    )
+    assert "2 games, 22 positions read, 20 kept" in capsys.readouterr().out
+    assert len(out.read_text().splitlines()) == 20
+
+
+def test_a_night_can_end_after_some_hours_or_at_a_time_of_day():
+    import time
+
+    before = time.time()
+
+    assert 39.9 * 3600 < cli._deadline("07:00", 40) - before < 40.1 * 3600
+    assert 0 < cli._deadline("07:00") - before <= 24 * 3600

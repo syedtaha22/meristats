@@ -37,12 +37,13 @@ is not committed, because it holds the paths of one machine.
 | `lichess_user` | The Lichess account whose games the nightly cycle learns from. Optional. |
 | `networks_branch` | The branch of the engine repository that holds the networks. Default `nightly-networks`. |
 | `anchor_positions` | A data file of labelled positions that every night's training includes a sample of. Optional. |
+| `leela_positions` | A data file from `leela convert`, of which every night's training includes a sample. Optional. |
 
 ## Commands
 
 | Command | Does |
 |---|---|
-| `build REF` | Builds the engine at a commit and records its hash and `bench` node count. |
+| `build REF` | Builds the engine at a commit and records its hash and `bench` node count. `--hidden N` builds it for a network of N values for each side. |
 | `run puzzles` | Plays the solutions of Lichess puzzles. |
 | `run search-nodes` | Searches a suite of 15 positions to fixed depths. |
 | `run rules` | Counts the nodes of reference positions (perft) and measures the speed. |
@@ -50,13 +51,16 @@ is not committed, because it holds the paths of one machine.
 | `run ladder` | Plays Stockfish at several levels and fits a rating. |
 | `run positions` | Plays the engine against itself and writes labelled positions. |
 | `run reanalyse` | Searches the games of the Lichess account again, deeper, and writes training data, mistakes and experience. |
-| `run train` | Trains a network from labelled positions, and checks that the engine loads it. |
+| `run train` | Trains a network from labelled positions, and checks that the engine loads it. `--hidden N` trains a network of another width, with an engine built for it. |
+| `run networks SPEC` | Trains candidate networks of several shapes, measures their speed and plays them against the deployed engine. |
 | `run job` | Builds and runs a C++ tool from `tools/` against the engine at a commit. |
 | `magics` | Finds the magic numbers of the sliders and writes them as C++ source. |
 | `compare BASE RUN...` | Compares puzzle runs with a base run, with a paired test. |
 | `report RUN`, `runs`, `pins` | Print a run, list the runs, list the pinned runs. |
 | `pin`, `unpin` | Put runs on a page of the site, or take them off. |
 | `publish`, `serve` | Write the site, and serve it on this computer. |
+| `leela fetch RUN` | Downloads an even sample of the tars of Leela Chess Zero from a folder of storage.lczero.org. |
+| `leela convert OUT TAR...` | Turns the tars into training positions. |
 | `lichess sync` | Stores the new games of the account in the data folder. |
 | `experience info FILE` | Prints the size of an experience file. |
 | `network source` | Writes a network file as the C++ source of the engine. |
@@ -125,7 +129,8 @@ evaluation, the move features and the position hash of the engine.
 
 ## Nightly cycle
 
-`meristats nightly` is one night of learning for the engine. It builds the engine at the head of
+`meristats nightly` is one night of learning for the engine. `--hours N` ends it after N hours, in
+place of a time of day, for a run of several days. It builds the engine at the head of
 `networks_branch`, which is the deployed engine, and then:
 
 1. plays the engine against itself for `--selfplay-minutes`
@@ -145,6 +150,41 @@ The night ends with the status `passed` when the test accepts the new network, a
 `summary.json` then names `candidate` and `deployed`. The night does not change the engine
 repository. A night that reaches its `--deadline` ends with the status `late`. Every stage is a
 run in the database, and `data_dir/nightly/<night>/summary.json` holds the numbers of the night.
+
+## Networks of other shapes
+
+The width of the first layer is fixed when the engine is built (`CHESS_NNUE_HIDDEN`, 128 by
+default), and a network file holds its width. `meristats build REF --hidden 256` builds an engine
+for a wider network, as another build of the same commit, and `run train --hidden 256` and `run
+match --a-hidden 256` build it by themselves. An engine of another width has no built-in network
+and loads one with `EvalFile`.
+
+`run networks SPEC` runs a list of candidates, for example widths against the amount of data:
+
+```toml
+engine = "HEAD"
+data = "/data/train.txt"
+rounds = 1000            # pairs of games
+nodes = 50000            # or: st = 0.05
+[[candidate]]
+name = "w256"
+hidden = 256
+epochs = 6
+lr = 0.0005
+```
+
+For each candidate it builds the engine, trains, measures the speed (nodes a second with the
+network) and plays the deployed engine. A match at a fixed number of nodes does not see that a wide
+network is slower, so the table has the speed as a share of the speed of the deployed engine, and
+`st` plays at a fixed time. The results are in `results.json` next to the spec, and a candidate
+that is in it is not run again.
+
+## Leela Chess Zero
+
+`meristats leela fetch k2hybrid-bt4tf13g-v7op1 --count 60` downloads 60 tars (about 260 MB each),
+spread evenly over the run so that the sample has games of all its stages, and `meristats leela
+convert leela.txt TAR...` turns them into positions in the format of the `positions` protocol.
+Setting `leela_positions` to that file adds a sample of it to the training data of a night.
 
 ## Tests
 

@@ -136,7 +136,7 @@ def setup(tmp_path, monkeypatch):
         nnue.write_network(network(1), destination)
         return destination
 
-    monkeypatch.setattr(nightly, "_committed_network", committed)
+    monkeypatch.setattr(nightly, "committed_network", committed)
     return config
 
 
@@ -311,3 +311,20 @@ def test_the_mix_of_the_training_data_and_the_density_of_self_play_follow_the_se
     assert fakes.selfplay_settings["skip"] == 2
     assert summary["stages"]["data"]["anchor"] == 7
     assert summary["stages"]["data"]["mistakes"] == 2
+
+
+def test_a_file_of_leela_positions_joins_the_training_data(setup, tmp_path):
+    leela = tmp_path / "leela.txt"
+    leela.write_text("fen\t1\t0\t1\n" * 40)
+    config = Config(**{**setup.__dict__, "leela_positions": leela})
+    fakes = Fakes(tmp_path, "H0", games("g1"))
+    summary = nightly.run(
+        config,
+        None,
+        settings(leela_lines=13),
+        book=tmp_path / "b.pgn",
+        functions=fakes.functions(),
+        progress=lambda t: None,
+    )
+
+    assert summary["stages"]["data"]["leela"] == 13

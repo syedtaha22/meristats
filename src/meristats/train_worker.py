@@ -47,9 +47,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--workers", type=int, required=True)
     parser.add_argument("--init", type=Path)
+    parser.add_argument("--hidden", type=int, default=nnue.HIDDEN)
     parser.add_argument("--device")
     args = parser.parse_args(argv)
     start = nnue.read_network(args.init) if args.init else None
+
+    if start is not None and start.hidden != args.hidden:
+        parser.error(f"{args.init} has {start.hidden} values for each side, not {args.hidden}")
+
     stamp = time.monotonic()
     positions = training.read_dataset(
         args.data,
@@ -73,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         lr=args.lr,
         seed=args.seed,
         init=start,
+        hidden=args.hidden,
         device=args.device,
         log=say,
         seconds_loading=loading,

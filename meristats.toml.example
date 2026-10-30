@@ -16,3 +16,6 @@ trainer_python = "/path/to/trainer/bin/python"
 lichess_user = "ce_meridian"
 networks_branch = "nightly-networks"
 anchor_positions = "/path/to/anchor-positions.txt"
+
+# Positions of Leela Chess Zero, from `meristats leela convert`. Optional.
+leela_positions = "/path/to/leela-positions.txt"

@@ -99,3 +99,13 @@ def test_the_nightly_settings_are_optional_and_have_defaults(tmp_path):
     assert str(loaded.trainer_python) == "/venv/bin/python"
     assert loaded.lichess_user == "ce_meridian" and loaded.networks_branch == "nets"
     assert "~" not in str(loaded.anchor_positions)
+
+
+def test_the_file_of_leela_positions_is_optional(tmp_path):
+    file = tmp_path / "m.toml"
+    file.write_text(GOOD)
+
+    assert load(file).leela_positions is None
+    file.write_text(GOOD + 'leela_positions = "~/leela.txt"\n')
+
+    assert load(file).leela_positions.name == "leela.txt"

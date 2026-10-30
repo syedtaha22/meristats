@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -29,6 +30,7 @@ from meristats.store import Store
 from meristats.uci import UciEngine
 
 BENCH_DEPTH = 10
+DEFAULT_HIDDEN = 128
 NODES = re.compile(r"Nodes searched\s*:\s*(\d+)")
 
 
@@ -128,6 +130,29 @@ def _first_line(command: list[str]) -> str:
         return "unavailable"
 
 
+def define_flags(defines: dict[str, str] | None) -> list[str]:
+    """
+    The compiler flags for macros of the engine, such as `CHESS_NNUE_HIDDEN=256`, in a fixed order.
+    """
+    return [f"-D{name}={value}" for name, value in sorted((defines or {}).items())]
+
+
+def width_defines(hidden: int | None) -> dict[str, str] | None:
+    """
+    The macros that build the engine for a network of `hidden` values for each side, or None for
+    the width that the engine has by default.
+    """
+    return None if hidden in (None, DEFAULT_HIDDEN) else {"CHESS_NNUE_HIDDEN": str(hidden)}
+
+
+def build_name(sha: str, defines: dict[str, str] | None) -> str:
+    """
+    The folder name of a build: the commit, and the macros when there are some.
+    """
+    flags = "-".join(f"{name}-{value}" for name, value in sorted((defines or {}).items()))
+    return f"{sha}-{flags}" if flags else sha
+
+
 def build_engine(
     config: Config,
     store: Store,
@@ -136,6 +161,7 @@ def build_engine(
     bench_depth: int = BENCH_DEPTH,
     jobs: int | None = None,
     target: str = "meridian",
+    defines: dict[str, str] | None = None,
 ) -> BuiltEngine:
     """
     Builds the engine at a commit of the engine repository and records the build.
@@ -143,18 +169,28 @@ def build_engine(
     The source is exported with `git archive`, so changes in the working tree never enter the
     build. The build is a Release build, and its flags are recorded. The binary is hashed, and
     `meridian bench` gives the node count, the fingerprint of the behaviour of the commit. A
-    commit that was built before must give the same node count again.
+    commit that was built before must give the same node count again. `defines` sets macros of the
+    engine for this build, such as the width of the network, and a build with other macros is
+    another build.
     """
     sha = resolve_commit(config.engine_repo, ref)
     source = config.cache_dir / "src" / sha
-    build_dir = config.cache_dir / "build" / sha
+    build_dir = config.cache_dir / "build" / build_name(sha, defines)
     binary = build_dir / target
 
     if not binary.exists():
         export_source(config.engine_repo, sha, source)
         build_dir.mkdir(parents=True, exist_ok=True)
         steps = [
-            ["cmake", "-S", str(source), "-B", str(build_dir), "-DCMAKE_BUILD_TYPE=Release"],
+            [
+                "cmake",
+                "-S",
+                str(source),
+                "-B",
+                str(build_dir),
+                "-DCMAKE_BUILD_TYPE=Release",
+                *([f"-DCMAKE_CXX_FLAGS={' '.join(define_flags(defines))}"] if defines else []),
+            ],
             [
                 "cmake",
                 "--build",
@@ -186,6 +222,7 @@ def build_engine(
         if compiler != "unavailable"
         else "unavailable",
         "cmake_version": _first_line(["cmake", "--version"]),
+        "defines": dict(sorted((defines or {}).items())),
     }
 
     nodes = run_bench(binary, bench_depth)
@@ -196,6 +233,9 @@ def build_engine(
     digest = file_sha256(binary)
 
     for row in store.find_engines(sha):
+        if json.loads(row["build_json"]).get("defines", {}) != build["defines"]:
+            continue
+
         if row["bench_nodes"] is not None and nodes is not None and row["bench_nodes"] != nodes:
             raise BuildError(
                 f"commit {sha[:8]} gave {nodes} bench nodes, and an earlier build gave "

@@ -92,3 +92,20 @@ def test_a_night_without_an_anchor_or_a_history_still_gives_a_file(tmp_path):
     buffer.add("selfplay", "2026-10-23", lines(4, "new"))
     counts = replay.assemble(tmp_path / "t.txt", buffer, "2026-10-23", anchor=None)
     assert counts == {"night": 4, "history": 0, "mistakes": 0}
+
+
+def test_the_leela_positions_are_sampled_into_the_training_file_when_a_file_is_given(tmp_path):
+    buffer = replay.Buffer(tmp_path / "buffer")
+    buffer.add("selfplay", "2026-10-23", lines(4, "new"))
+    leela = tmp_path / "leela.txt"
+    leela.write_text(lines(30, "leela", games=9))
+    out = tmp_path / "t.txt"
+    counts = replay.assemble(out, buffer, "2026-10-23", anchor=None, leela=leela, leela_lines=11)
+
+    assert counts == {"night": 4, "history": 0, "mistakes": 0, "leela": 11}
+    assert sum(1 for line in out.read_text().splitlines() if "\tleela" in line) == 11
+    assert replay.assemble(out, buffer, "2026-10-23", anchor=None, leela=leela, leela_lines=0) == {
+        "night": 4,
+        "history": 0,
+        "mistakes": 0,
+    }

@@ -172,3 +172,22 @@ def test_a_trainer_that_fails_is_an_error_with_its_last_lines(
 
     with pytest.raises(protocol.TrainingError, match="no torch here"):
         train(named, store, engine, framework_repo, tmp_path)
+
+
+def test_a_network_of_another_width_is_trained_and_recorded(
+    config, store, engine, framework_repo, tmp_path
+):
+    out = tmp_path / "wide.nnue"
+    _, summary = train(config, store, engine, framework_repo, tmp_path, out=out, hidden=32)
+
+    assert nnue.read_network(out).hidden == 32 and summary["positions"]["kept"] == 1500
+
+
+def test_a_start_network_of_another_width_is_refused(
+    config, store, engine, framework_repo, tmp_path
+):
+    start = tmp_path / "start.nnue"
+    train(config, store, engine, framework_repo, tmp_path, out=start)
+
+    with pytest.raises(protocol.TrainingError, match="has 128 values for each side, not 32"):
+        train(config, store, engine, framework_repo, tmp_path, init=start, hidden=32)

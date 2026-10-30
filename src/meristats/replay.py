@@ -131,42 +131,44 @@ def assemble(
     night: str,
     *,
     anchor: Path | None,
+    leela: Path | None = None,
     seed: int = 1,
     history_lines: int = 1_500_000,
     anchor_lines: int = 1_000_000,
+    leela_lines: int = 1_000_000,
     mistake_lines: int = 50_000,
     mistake_repeat: int = 3,
 ) -> dict:
     """
     Writes the training file of a night to `out`. It holds all of the night's positions, a sample
-    of the nights before it, a sample of the anchor data, and the mistakes (of the night and of
-    the nights before) each `mistake_repeat` times, which gives them more weight. The lines of a
-    game keep one game number, so that the games that the trainer holds out are whole games.
+    of the nights before it, a sample of the anchor data, a sample of the positions of Leela Chess
+    Zero (see `leela.py`) when a file of them is given, and the mistakes (of the night and of the
+    nights before) each `mistake_repeat` times, which gives them more weight. The lines of a game
+    keep one game number, so that the games that the trainer holds out are whole games. The
+    positions of the night are copied one by one, since a long night has millions of them.
     """
     rng = random.Random(seed)
-    sources: list[tuple[str, list[str]]] = []
-    tonight = [
+    tonight = (
         line
         for kind in ("selfplay", "lichess")
         if buffer.path(kind, night).exists()
         for line in read_lines(buffer.path(kind, night))
-    ]
-    sources.append(("night", tonight))
-    past = buffer.files(("selfplay", "lichess"), before=night)
-    sources.append(
-        (
-            "history",
-            sample((line for path in past for line in read_lines(path)), history_lines, rng),
-        )
     )
+    past = buffer.files(("selfplay", "lichess"), before=night)
+    history = sample((line for path in past for line in read_lines(path)), history_lines, rng)
     past_mistakes = buffer.files(("mistakes",))
     mistakes = sample(
         (line for path in past_mistakes for line in read_lines(path)), mistake_lines, rng
     )
-    sources.append(("mistakes", mistakes * mistake_repeat))
+    sources: list[tuple[str, Iterable[str]]] = [
+        ("night", tonight),
+        ("history", history),
+        ("mistakes", mistakes * mistake_repeat),
+    ]
 
-    if anchor is not None and Path(anchor).exists():
-        sources.append(("anchor", sample(read_lines(Path(anchor)), anchor_lines, rng)))
+    for name, path, count in (("anchor", anchor, anchor_lines), ("leela", leela, leela_lines)):
+        if path is not None and Path(path).exists() and count > 0:
+            sources.append((name, sample(read_lines(Path(path)), count, rng)))
 
     numbers: dict[tuple[str, str], int] = {}
     counts = {}

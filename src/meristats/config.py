@@ -45,6 +45,7 @@ class Config:
     lichess_user: str | None = None
     networks_branch: str = "nightly-networks"
     anchor_positions: Path | None = None
+    leela_positions: Path | None = None
 
 
 def _path(value: str) -> Path:
@@ -97,4 +98,5 @@ def load(path: Path | None = None) -> Config:
         lichess_user=raw.get("lichess_user") or None,
         networks_branch=raw.get("networks_branch", "nightly-networks"),
         anchor_positions=_path(raw["anchor_positions"]) if raw.get("anchor_positions") else None,
+        leela_positions=_path(raw["leela_positions"]) if raw.get("leela_positions") else None,
     )

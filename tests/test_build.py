@@ -22,10 +22,13 @@ from conftest import run_git
 from meristats.build import (
     BuildError,
     build_engine,
+    build_name,
+    define_flags,
     export_source,
     file_sha256,
     resolve_commit,
     run_bench,
+    width_defines,
 )
 
 pytestmark = pytest.mark.skipif(
@@ -182,3 +185,58 @@ def test_helper_functions_give_unavailable_when_they_cannot_read(tmp_path):
     (tmp_path / "cache").write_text("A:STRING=1\nB:PATH=two\n")
     assert build._cache_value(tmp_path / "cache", "B") == "two"
     assert build._cache_value(tmp_path / "cache", "C") == "unavailable"
+
+
+WIDTH_CPP = """
+#include <iostream>
+#include <string>
+#ifndef WIDTH
+#define WIDTH 128
+#endif
+int main(int argc, char **argv) {
+    if (argc > 1 && std::string(argv[1]) == "bench") {
+        std::cout << "Nodes searched  : " << WIDTH * 10 << "\\nNodes/second    : 1\\n";
+        return 0;
+    }
+    std::string line;
+    while (std::getline(std::cin, line)) {
+        if (line == "uci") {
+            std::cout << "id name Tiny\\nuciok\\n" << std::flush;
+        } else if (line == "quit") {
+            return 0;
+        }
+    }
+    return 0;
+}
+"""
+
+
+def test_macros_make_another_build_of_the_same_commit(config, tiny_repo, store):
+    repo, _ = tiny_repo
+    (repo / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.16)\nproject(tiny CXX)\nadd_executable(meridian main.cpp)\n"
+    )
+    (repo / "main.cpp").write_text(WIDTH_CPP)
+    run_git(repo, "add", "-A")
+    run_git(repo, "commit", "-q", "-m", "width")
+    plain = build_engine(config, store, "HEAD")
+    wide = build_engine(config, store, "HEAD", defines={"WIDTH": "256"})
+    again = build_engine(config, store, "HEAD", defines={"WIDTH": "256"})
+
+    assert (plain.bench_nodes, wide.bench_nodes) == (1280, 2560)
+    assert plain.binary != wide.binary and wide.binary.parent.name.endswith("WIDTH-256")
+    assert wide.build["defines"] == {"WIDTH": "256"} and plain.build["defines"] == {}
+    assert wide.engine_id == again.engine_id != plain.engine_id
+    assert len(store.find_engines(plain.commit_sha)) == 2
+
+
+def test_the_flags_and_the_names_of_a_build_follow_the_sorted_macros():
+    assert define_flags({"B": "2", "A": "1"}) == ["-DA=1", "-DB=2"]
+    assert define_flags(None) == []
+    assert build_name("abc", {"CHESS_NNUE_HIDDEN": "256"}) == "abc-CHESS_NNUE_HIDDEN-256"
+    assert build_name("abc", None) == "abc"
+
+
+def test_the_default_width_needs_no_macro_and_another_width_sets_one():
+    assert width_defines(None) is None and width_defines(128) is None
+    assert width_defines(256) == {"CHESS_NNUE_HIDDEN": "256"}
