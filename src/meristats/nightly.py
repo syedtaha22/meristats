@@ -16,20 +16,18 @@
 
 
 """
-The nightly cycle: the engine plays itself, the day's games of the account are analysed again,
-a network is trained from all of it and from the days before, and the night ends with the status
-`passed` when the network beats the deployed one in a sequential test. The night does not change
+The nightly cycle: the engine plays itself, a network is trained from those positions and from
+the nights before, and the night ends with the status `passed` when the network beats the
+deployed one in a sequential test. The night does not change
 the engine repository: whoever deploys the network reads `candidate` and `deployed` from the
 summary.
 
 The stages, in order:
 
 1. self-play of the deployed engine, for a number of minutes
-2. the games of the account since the last night, searched again, deeper than they were played
-3. the experience file of the engine, updated with the best moves of those searches
-4. the replay buffer, and from it the training file
-5. the training, starting from the deployed network
-6. a match of the new network against the deployed one, at a fixed number of nodes per move
+2. the replay buffer, and from it the training file
+3. the training, starting from the deployed network
+4. a match of the new network against the deployed one, at a fixed number of nodes per move
 
 The deployed engine is the head of the branch of the networks. A night that is late for its
 deadline ends with the status `late` and the stage that it did not reach.
@@ -44,12 +42,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from meristats import experience, lichess, nnue, replay
+from meristats import nnue, replay
 from meristats.build import build_engine
 from meristats.config import Config
 from meristats.protocols import match as match_protocol
 from meristats.protocols import positions as positions_protocol
-from meristats.protocols import reanalyse as reanalyse_protocol
 from meristats.protocols import train as train_protocol
 from meristats.store import Store
 
@@ -69,14 +66,11 @@ class Settings:
     selfplay_minutes: float = 60
     selfplay_depth: int = 9
     selfplay_skip: int = 3
-    analysis_minutes: float = 30
-    analysis_depth: int = 12
     epochs: int = 4
     lr: float = 0.0002
     anchor_lines: int = 1_000_000
     leela_lines: int = 1_000_000
     history_lines: int = 1_500_000
-    mistake_repeat: int = 3
     match_nodes: int = 50000
     match_minutes: float = 120
     rounds: int = 5000
@@ -94,8 +88,6 @@ def stages() -> dict[str, Callable]:
     return {
         "build": build_engine,
         "selfplay": positions_protocol.run,
-        "sync": lichess.sync,
-        "reanalyse": reanalyse_protocol.run,
         "train": train_protocol.run,
         "match": match_protocol.run,
     }
@@ -182,65 +174,6 @@ def run(
         progress(f"self-play: {played['games']} games, {played['positions']} positions")
         buffer = replay.Buffer(Path(config.data_dir) / "replay")
         buffer.add("selfplay", night, (work / "selfplay.txt").read_text())
-        mistakes_text = ""
-
-        if config.lichess_user and not late("analysis"):
-            problem = None
-
-            try:
-                fresh = do["sync"](config.data_dir, config.lichess_user)
-            except lichess.LichessError as error:
-                fresh, problem = [], str(error)
-
-            known = lichess.analysed(config.data_dir, config.lichess_user)
-            todo = [
-                g
-                for g in lichess.stored(lichess.games_file(config.data_dir, config.lichess_user))
-                if g["id"] not in known
-            ]
-            summary["stages"]["sync"] = {"new": len(fresh), "waiting": len(todo)}
-
-            if problem:
-                summary["stages"]["sync"]["error"] = problem
-
-            if todo:
-                limit = min(settings.analysis_minutes * 60, remaining(reserve=600))
-                run_id, analysed = do["reanalyse"](
-                    config,
-                    store,
-                    engine,
-                    todo,
-                    config.lichess_user,
-                    work / "reanalysis",
-                    depth=settings.analysis_depth,
-                    deadline=time.time() + limit,
-                    allow_dirty=settings.allow_dirty,
-                )
-                lichess.mark_analysed(
-                    config.data_dir, config.lichess_user, analysed["analysed_ids"]
-                )
-                summary["stages"]["reanalyse"] = {
-                    "run": run_id,
-                    **{k: v for k, v in analysed.items() if k != "analysed_ids"},
-                }
-                progress(
-                    f"analysis: {analysed['analysed']} games, {analysed['mistakes']} mistakes, "
-                    f"{analysed['positions']} positions"
-                )
-                folder = work / "reanalysis"
-                buffer.add("lichess", night, (folder / "positions.txt").read_text())
-                mistakes_text = (folder / "mistakes.txt").read_text()
-                path = Path(config.data_dir) / "experience" / "experience.bin"
-                path.parent.mkdir(parents=True, exist_ok=True)
-                old = experience.read(path) if path.exists() else {}
-                new = experience.merge(old, experience.read(folder / "experience.bin"))
-                experience.write(path, new)
-                summary["stages"]["experience"] = {
-                    "entries": len(new),
-                    "added": len(new) - len(old),
-                }
-
-        buffer.add("mistakes", night, mistakes_text)
 
         if late("training"):
             return finish()
@@ -255,7 +188,6 @@ def run(
             history_lines=settings.history_lines,
             anchor_lines=settings.anchor_lines,
             leela_lines=settings.leela_lines,
-            mistake_repeat=settings.mistake_repeat,
         )
         summary["stages"]["data"] = counts
         run_id, trained = do["train"](
@@ -345,16 +277,6 @@ def format_summary(summary: dict) -> str:
     if "selfplay" in stages:
         s = stages["selfplay"]
         lines.append(f"Self-play: {s['games']} games, {s['positions']} positions")
-
-    if "reanalyse" in stages:
-        s = stages["reanalyse"]
-        lines.append(
-            f"Analysis: {s['analysed']} games, {s['mistakes']} mistakes, mean loss "
-            f"{s['mean_loss_cp']:.0f} cp"
-        )
-
-    if "experience" in stages:
-        lines.append(f"Experience: {stages['experience']['entries']} positions")
 
     if "train" in stages:
         s = stages["train"]

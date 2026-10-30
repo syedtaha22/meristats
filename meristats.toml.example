@@ -13,7 +13,6 @@ workers = 1
 trainer_python = "/path/to/trainer/bin/python"
 
 # The nightly cycle. Optional.
-lichess_user = "ce_meridian"
 networks_branch = "nightly-networks"
 anchor_positions = "/path/to/anchor-positions.txt"
 

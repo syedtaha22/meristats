@@ -20,9 +20,8 @@ The replay buffer: the labelled positions of every night, kept so that each nigh
 see the days before it, and the assembly of a training file from the buffer and the anchor data.
 
 The buffer is a folder of compressed files, `<kind>/<night>.txt.zst`, in the format of the
-`positions` protocol. The kinds are `selfplay` (games of the engine against itself), `lichess`
-(games of the account, analysed again) and `mistakes` (positions where the account gave away
-material). Files are written once.
+`positions` protocol. The one kind is `selfplay` (games of the engine against itself). Files are
+written once.
 """
 
 import io
@@ -32,7 +31,7 @@ from pathlib import Path
 
 import zstandard
 
-KINDS = ("selfplay", "lichess", "mistakes")
+KINDS = ("selfplay",)
 
 
 class ReplayError(RuntimeError):
@@ -136,35 +135,20 @@ def assemble(
     history_lines: int = 1_500_000,
     anchor_lines: int = 1_000_000,
     leela_lines: int = 1_000_000,
-    mistake_lines: int = 50_000,
-    mistake_repeat: int = 3,
 ) -> dict:
     """
     Writes the training file of a night to `out`. It holds all of the night's positions, a sample
-    of the nights before it, a sample of the anchor data, a sample of the positions of Leela Chess
-    Zero (see `leela.py`) when a file of them is given, and the mistakes (of the night and of the
-    nights before) each `mistake_repeat` times, which gives them more weight. The lines of a game
-    keep one game number, so that the games that the trainer holds out are whole games. The
-    positions of the night are copied one by one, since a long night has millions of them.
+    of the nights before it, a sample of the anchor data, and a sample of the positions of Leela
+    Chess Zero (see `leela.py`) when a file of them is given. The lines of a game keep one game
+    number, so that the games that the trainer holds out are whole games. The positions of the
+    night are copied one by one, since a long night has millions of them.
     """
     rng = random.Random(seed)
-    tonight = (
-        line
-        for kind in ("selfplay", "lichess")
-        if buffer.path(kind, night).exists()
-        for line in read_lines(buffer.path(kind, night))
-    )
-    past = buffer.files(("selfplay", "lichess"), before=night)
+    tonight_file = buffer.path("selfplay", night)
+    tonight = read_lines(tonight_file) if tonight_file.exists() else iter(())
+    past = buffer.files(("selfplay",), before=night)
     history = sample((line for path in past for line in read_lines(path)), history_lines, rng)
-    past_mistakes = buffer.files(("mistakes",))
-    mistakes = sample(
-        (line for path in past_mistakes for line in read_lines(path)), mistake_lines, rng
-    )
-    sources: list[tuple[str, Iterable[str]]] = [
-        ("night", tonight),
-        ("history", history),
-        ("mistakes", mistakes * mistake_repeat),
-    ]
+    sources: list[tuple[str, Iterable[str]]] = [("night", tonight), ("history", history)]
 
     for name, path, count in (("anchor", anchor, anchor_lines), ("leela", leela, leela_lines)):
         if path is not None and Path(path).exists() and count > 0:
@@ -185,7 +169,7 @@ def assemble(
                 if len(fields) != 4:
                     continue
 
-                key = (name if name != "mistakes" else "night", fields[2])
+                key = (name, fields[2])
                 fields[2] = str(numbers.setdefault(key, len(numbers) + 1))
                 handle.write("\t".join(fields) + "\n")
                 written += 1

@@ -59,12 +59,10 @@ def test_a_sample_is_uniform_and_has_the_size_that_was_asked_for():
     assert replay.sample(iter(["a", "b"]), 5, rng) == ["a", "b"]
 
 
-def test_the_training_file_has_the_night_the_history_the_mistakes_and_the_anchor(tmp_path):
+def test_the_training_file_has_the_night_the_history_and_the_anchor(tmp_path):
     buffer = replay.Buffer(tmp_path / "buffer")
     buffer.add("selfplay", "2026-10-22", lines(40, "old"))
     buffer.add("selfplay", "2026-10-23", lines(10, "new"))
-    buffer.add("lichess", "2026-10-23", lines(5, "game"))
-    buffer.add("mistakes", "2026-10-22", lines(2, "mistake"))
     anchor = tmp_path / "anchor.txt"
     anchor.write_text(lines(30, "anchor", games=7))
     out = tmp_path / "train.txt"
@@ -75,23 +73,20 @@ def test_the_training_file_has_the_night_the_history_the_mistakes_and_the_anchor
         anchor=anchor,
         history_lines=20,
         anchor_lines=12,
-        mistake_lines=10,
-        mistake_repeat=3,
     )
-    assert counts == {"night": 15, "history": 20, "mistakes": 6, "anchor": 12}
+    assert counts == {"night": 10, "history": 20, "anchor": 12}
     rows = [line.split("\t") for line in out.read_text().splitlines()]
-    assert len(rows) == 53
-    assert sum(1 for r in rows if r[3].startswith("mistake")) == 6
+    assert len(rows) == 42
     assert sum(1 for r in rows if r[3].startswith("new")) == 10
     assert sum(1 for r in rows if r[3].startswith("anchor")) == 12
-    assert all(r[3].startswith(("old", "new", "game", "mistake", "anchor")) for r in rows)
+    assert all(r[3].startswith(("old", "new", "anchor")) for r in rows)
 
 
 def test_a_night_without_an_anchor_or_a_history_still_gives_a_file(tmp_path):
     buffer = replay.Buffer(tmp_path / "buffer")
     buffer.add("selfplay", "2026-10-23", lines(4, "new"))
     counts = replay.assemble(tmp_path / "t.txt", buffer, "2026-10-23", anchor=None)
-    assert counts == {"night": 4, "history": 0, "mistakes": 0}
+    assert counts == {"night": 4, "history": 0}
 
 
 def test_the_leela_positions_are_sampled_into_the_training_file_when_a_file_is_given(tmp_path):
@@ -102,10 +97,9 @@ def test_the_leela_positions_are_sampled_into_the_training_file_when_a_file_is_g
     out = tmp_path / "t.txt"
     counts = replay.assemble(out, buffer, "2026-10-23", anchor=None, leela=leela, leela_lines=11)
 
-    assert counts == {"night": 4, "history": 0, "mistakes": 0, "leela": 11}
+    assert counts == {"night": 4, "history": 0, "leela": 11}
     assert sum(1 for line in out.read_text().splitlines() if "\tleela" in line) == 11
     assert replay.assemble(out, buffer, "2026-10-23", anchor=None, leela=leela, leela_lines=0) == {
         "night": 4,
         "history": 0,
-        "mistakes": 0,
     }

@@ -16,7 +16,6 @@
 
 import argparse
 import importlib
-import json
 import shutil
 import subprocess
 import sys
@@ -27,10 +26,8 @@ from pathlib import Path
 from meristats import (
     __version__,
     datasets,
-    experience,
     external,
     leela,
-    lichess,
     nightly,
     nnue,
 )
@@ -43,7 +40,6 @@ from meristats.protocols import match as match_protocol
 from meristats.protocols import networks as networks_protocol
 from meristats.protocols import positions as positions_protocol
 from meristats.protocols import puzzles as puzzles_protocol
-from meristats.protocols import reanalyse as reanalyse_protocol
 from meristats.protocols import train as train_protocol
 from meristats.protocols import rules as rules_protocol
 from meristats.protocols import search_nodes as search_nodes_protocol
@@ -358,56 +354,6 @@ def _run_positions(args, config: Config, store: Store) -> int:
     return 0
 
 
-def _user(args, config: Config) -> str:
-    user = getattr(args, "user", None) or config.lichess_user
-
-    if not user:
-        raise lichess.LichessError("no account: pass --user or set lichess_user in the settings")
-
-    return user
-
-
-def _run_reanalyse(args, config: Config, store: Store) -> int:
-    user = _user(args, config)
-    games = lichess.stored(lichess.games_file(config.data_dir, user))
-
-    if args.limit:
-        games = games[-args.limit :]
-
-    engine = build_engine(config, store, args.engine)
-    out = args.out or config.cache_dir / "reanalysis" / engine.commit_sha[:12]
-    run_id, summary = reanalyse_protocol.run(
-        config,
-        store,
-        engine,
-        games,
-        user,
-        out,
-        depth=args.depth,
-        mistake_cp=args.mistake_cp,
-        engine_config=args.engine_config,
-        eval_file=args.eval_file,
-        workers=args.workers,
-        allow_dirty=args.allow_dirty,
-    )
-    print(run_id)
-    print(
-        f"{summary['analysed']} games, {summary['positions']} quiet positions, "
-        f"{summary['mistakes']} mistakes, mean loss {summary['mean_loss_cp']:.0f} cp, "
-        f"{summary['experience']} experience positions"
-    )
-    print(f"files in {out}")
-    worst = sorted(
-        json.loads((Path(out) / "mistakes.json").read_text()), key=lambda m: -m["loss_cp"]
-    )
-
-    for mistake in worst[:15]:
-        print(
-            f"  game {mistake['game']} ply {mistake['ply']}: played {mistake['played']}, "
-            f"best {mistake['best']}, loss {mistake['loss_cp']} cp"
-        )
-
-    return 0
 
 
 def _leela(args, config: Config) -> int:
@@ -464,9 +410,6 @@ def _nightly(args, config: Config, store: Store) -> int:
         anchor_lines=args.anchor_lines,
         leela_lines=args.leela_lines,
         history_lines=args.history_lines,
-        mistake_repeat=args.mistake_repeat,
-        analysis_minutes=args.analysis_minutes,
-        analysis_depth=args.analysis_depth,
         epochs=args.epochs,
         lr=args.lr,
         match_nodes=args.match_nodes,
@@ -727,9 +670,6 @@ def build_parser() -> argparse.ArgumentParser:
     fetch_parser = commands.add_parser("fetch", help="download Stockfish or the opening book")
     fetch_parser.add_argument("what", choices=["stockfish", "book"])
 
-    lichess_parser = commands.add_parser("lichess", help="the games of an account")
-    lichess_parser.add_argument("action", choices=["sync"])
-    lichess_parser.add_argument("--user")
     leela_parser = commands.add_parser("leela", help="the training games of Leela Chess Zero")
     leela_actions = leela_parser.add_subparsers(dest="action", required=True)
     leela_fetch = leela_actions.add_parser("fetch", help="download an even sample of the tars")
@@ -743,9 +683,6 @@ def build_parser() -> argparse.ArgumentParser:
     leela_convert.add_argument("--min-ply", type=int, default=6, help="skip the first N plies")
     leela_convert.add_argument("--limit-games", type=int, default=0, help="games of each tar")
     leela_convert.add_argument("--workers", type=int)
-    experience_parser = commands.add_parser("experience", help="an experience file")
-    experience_parser.add_argument("action", choices=["info"])
-    experience_parser.add_argument("file", type=Path)
     network_parser = commands.add_parser("network", help="a network file")
     network_parser.add_argument("action", choices=["source"])
     network_parser.add_argument("network", type=Path, help="the network file")
@@ -761,8 +698,6 @@ def build_parser() -> argparse.ArgumentParser:
     nightly_parser.add_argument(
         "--selfplay-skip", type=int, default=3, help="keep a position every N plies"
     )
-    nightly_parser.add_argument("--analysis-minutes", type=float, default=30)
-    nightly_parser.add_argument("--analysis-depth", type=int, default=12)
     nightly_parser.add_argument("--epochs", type=int, default=4)
     nightly_parser.add_argument("--lr", type=float, default=0.0002)
     nightly_parser.add_argument(
@@ -773,9 +708,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     nightly_parser.add_argument(
         "--history-lines", type=int, default=1_500_000, help="positions of the nights before"
-    )
-    nightly_parser.add_argument(
-        "--mistake-repeat", type=int, default=3, help="how often each mistake is in the data"
     )
     nightly_parser.add_argument("--match-nodes", type=int, default=50000)
     nightly_parser.add_argument("--match-minutes", type=float, default=120)
@@ -860,20 +792,6 @@ def build_parser() -> argparse.ArgumentParser:
     positions.add_argument("--workers", type=int)
     positions.add_argument("--max-seconds", type=float, help="stop after this many seconds")
     positions.add_argument("--allow-dirty", action="store_true")
-
-    reanalyse = protocols.add_parser(
-        "reanalyse", help="search the games of the account again, deeper"
-    )
-    reanalyse.add_argument("--engine", required=True)
-    reanalyse.add_argument("--user", help="the account; the default is lichess_user")
-    reanalyse.add_argument("--depth", type=int, default=12)
-    reanalyse.add_argument("--limit", type=int, default=0, help="only the newest N games")
-    reanalyse.add_argument("--mistake-cp", type=int, default=reanalyse_protocol.MISTAKE_CP)
-    reanalyse.add_argument("--out", type=Path, help="the folder for the files")
-    reanalyse.add_argument("--engine-config")
-    reanalyse.add_argument("--eval-file", type=Path)
-    reanalyse.add_argument("--workers", type=int)
-    reanalyse.add_argument("--allow-dirty", action="store_true")
 
     networks = protocols.add_parser(
         "networks", help="train candidate networks of several shapes and play them"
@@ -979,7 +897,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 RUNNERS = {
     "networks": _run_networks,
-    "reanalyse": _run_reanalyse,
     "positions": _run_positions,
     "train": _run_train,
     "experiment": _run_experiment,
@@ -1064,20 +981,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"bench   {built.bench_nodes} nodes")
             elif args.command == "run":
                 return RUNNERS[args.protocol](args, config, store)
-            elif args.command == "lichess":
-                user = _user(args, config)
-                new = lichess.sync(config.data_dir, user)
-                total = len(lichess.stored(lichess.games_file(config.data_dir, user)))
-                print(f"{len(new)} new games of {user}, {total} stored")
             elif args.command == "leela":
                 return _leela(args, config)
-            elif args.command == "experience":
-                entries = experience.read(args.file)
-                depths = sorted(depth for _, _, depth in entries.values())
-                print(f"{len(entries)} positions")
-
-                if depths:
-                    print(f"depth {depths[0]} to {depths[-1]}, median {depths[len(depths) // 2]}")
             elif args.command == "network":
                 args.out.write_text(nnue.source_text(nnue.read_network(args.network)))
             elif args.command == "nightly":
@@ -1157,14 +1062,11 @@ def main(argv: list[str] | None = None) -> int:
         search_nodes_protocol.RoundsDisagree,
         job_protocol.JobError,
         EngineError,
-        lichess.LichessError,
         leela.LeelaError,
         nnue.NetworkError,
         nightly.NightlyError,
-        reanalyse_protocol.ReanalyseError,
         networks_protocol.NetworksError,
         train_protocol.TrainingError,
-        experience.ExperienceError,
     ) as error:
         print(f"meristats: {error}", file=sys.stderr)
         return 1

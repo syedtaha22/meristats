@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from meristats import lichess, nightly
+from meristats import nightly
 from meristats.build import BuiltEngine
 from meristats.config import Config
 from meristats import nnue
@@ -43,18 +43,15 @@ class Fakes:
     The stages of a night, replaced by functions that record that they were called.
     """
 
-    def __init__(self, tmp_path, verdict="H1", games=None):
+    def __init__(self, tmp_path, verdict="H1"):
         self.calls = []
         self.verdict = verdict
-        self.games = games or []
         self.tmp_path = tmp_path
 
     def functions(self):
         return {
             "build": self.build,
             "selfplay": self.selfplay,
-            "sync": self.sync,
-            "reanalyse": self.reanalyse,
             "train": self.train,
             "match": self.match,
         }
@@ -68,30 +65,6 @@ class Fakes:
         self.selfplay_settings = settings
         out.write_text("fen\t1\t0\t10\nfen\t1\t0\t12\n")
         return "run-selfplay", {"games": 3, "positions": 2}
-
-    def sync(self, data_dir, user):
-        self.calls.append("sync")
-        path = lichess.games_file(data_dir, user)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("".join(json.dumps(g) + "\n" for g in self.games))
-        return self.games
-
-    def reanalyse(self, config, store, engine, todo, user, out, **settings):
-        self.calls.append("reanalyse")
-        out.mkdir(parents=True, exist_ok=True)
-        (out / "positions.txt").write_text("fen\t1\t1\t5\n")
-        (out / "mistakes.txt").write_text("fen\t1\t1\t5\n")
-        from meristats import experience
-
-        experience.write(out / "experience.bin", {1: (2, 3, 14)})
-        return "run-reanalyse", {
-            "analysed": len(todo),
-            "analysed_ids": [g["id"] for g in todo],
-            "mistakes": 1,
-            "positions": 1,
-            "mean_loss_cp": 12.0,
-            "games": len(todo),
-        }
 
     def train(self, config, store, engine, data, **settings):
         self.calls.append("train")
@@ -129,7 +102,6 @@ def setup(tmp_path, monkeypatch):
         data_dir=tmp_path / "data",
         cache_dir=tmp_path / "cache",
         workers=2,
-        lichess_user="me",
     )
 
     def committed(repo, sha, destination):
@@ -144,12 +116,8 @@ def settings(**changes):
     return nightly.Settings(deadline=time.time() + 6 * 3600, night="n1", **changes)
 
 
-def games(*ids):
-    return [{"id": i, "moves": "e4", "players": {}} for i in ids]
-
-
 def test_a_night_that_passes_names_the_candidate_and_the_deployed_network(setup, tmp_path):
-    fakes = Fakes(tmp_path, "H1", games("g1", "g2"))
+    fakes = Fakes(tmp_path, "H1")
     summary = nightly.run(
         setup,
         None,
@@ -168,7 +136,7 @@ def test_a_night_that_passes_names_the_candidate_and_the_deployed_network(setup,
         100,
         50000,
     )
-    assert fakes.calls == ["build", "selfplay", "sync", "reanalyse", "train", "match"]
+    assert fakes.calls == ["build", "selfplay", "train", "match"]
     assert (Path(setup.data_dir) / "nightly" / "n1" / "summary.json").exists()
 
 
@@ -244,7 +212,7 @@ def test_training_starts_from_the_deployed_network_and_the_data_has_the_night_an
     anchor = tmp_path / "anchor.txt"
     anchor.write_text("fen\t1\t0\t1\n" * 5)
     config = Config(**{**setup.__dict__, "anchor_positions": anchor})
-    fakes = Fakes(tmp_path, "H0", games("g1"))
+    fakes = Fakes(tmp_path, "H0")
     summary = nightly.run(
         config,
         None,
@@ -255,27 +223,11 @@ def test_training_starts_from_the_deployed_network_and_the_data_has_the_night_an
     )
     assert fakes.train_settings["init"].name == "deployed.nnue"
     counts = summary["stages"]["data"]
-    assert counts["night"] == 3 and counts["anchor"] == 5 and counts["mistakes"] == 3
-    assert lichess.analysed(setup.data_dir, "me") == {"g1"}
-
-
-def test_the_experience_file_grows_with_the_analysis_of_the_games(setup, tmp_path):
-    fakes = Fakes(tmp_path, "H0", games("g1"))
-    summary = nightly.run(
-        setup,
-        None,
-        settings(),
-        book=tmp_path / "b.pgn",
-        functions=fakes.functions(),
-        progress=lambda t: None,
-    )
-    path = Path(setup.data_dir) / "experience" / "experience.bin"
-    assert path.exists()
-    assert summary["stages"]["experience"] == {"entries": 1, "added": 1}
+    assert counts == {"night": 2, "history": 0, "anchor": 5}
 
 
 def test_the_summary_is_written_as_text_for_the_email(setup, tmp_path):
-    fakes = Fakes(tmp_path, "H1", games("g1"))
+    fakes = Fakes(tmp_path, "H1")
     summary = nightly.run(
         setup,
         None,
@@ -298,11 +250,11 @@ def test_the_mix_of_the_training_data_and_the_density_of_self_play_follow_the_se
     anchor = tmp_path / "anchor.txt"
     anchor.write_text("fen\t1\t0\t1\n" * 50)
     config = Config(**{**setup.__dict__, "anchor_positions": anchor})
-    fakes = Fakes(tmp_path, "H0", games("g1"))
+    fakes = Fakes(tmp_path, "H0")
     summary = nightly.run(
         config,
         None,
-        settings(anchor_lines=7, selfplay_skip=2, mistake_repeat=2),
+        settings(anchor_lines=7, selfplay_skip=2),
         book=tmp_path / "b.pgn",
         functions=fakes.functions(),
         progress=lambda t: None,
@@ -310,14 +262,13 @@ def test_the_mix_of_the_training_data_and_the_density_of_self_play_follow_the_se
 
     assert fakes.selfplay_settings["skip"] == 2
     assert summary["stages"]["data"]["anchor"] == 7
-    assert summary["stages"]["data"]["mistakes"] == 2
 
 
 def test_a_file_of_leela_positions_joins_the_training_data(setup, tmp_path):
     leela = tmp_path / "leela.txt"
     leela.write_text("fen\t1\t0\t1\n" * 40)
     config = Config(**{**setup.__dict__, "leela_positions": leela})
-    fakes = Fakes(tmp_path, "H0", games("g1"))
+    fakes = Fakes(tmp_path, "H0")
     summary = nightly.run(
         config,
         None,

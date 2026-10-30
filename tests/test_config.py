@@ -87,17 +87,17 @@ def test_the_nightly_settings_are_optional_and_have_defaults(tmp_path):
     file.write_text(GOOD)
     loaded = load(file)
 
-    assert loaded.trainer_python is None and loaded.lichess_user is None
+    assert loaded.trainer_python is None
     assert loaded.networks_branch == "nightly-networks" and loaded.anchor_positions is None
     file.write_text(
         GOOD
-        + 'trainer_python = "/venv/bin/python"\nlichess_user = "ce_meridian"\n'
+        + 'trainer_python = "/venv/bin/python"\n'
         + 'networks_branch = "nets"\nanchor_positions = "~/a.txt"\n'
     )
     loaded = load(file)
 
     assert str(loaded.trainer_python) == "/venv/bin/python"
-    assert loaded.lichess_user == "ce_meridian" and loaded.networks_branch == "nets"
+    assert loaded.networks_branch == "nets"
     assert "~" not in str(loaded.anchor_positions)
 
 

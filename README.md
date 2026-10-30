@@ -34,7 +34,6 @@ is not committed, because it holds the paths of one machine.
 | `fastchess` | The path of fastchess, for matches. Optional. |
 | `stockfish` | The path of Stockfish, for the ladder. Optional, and `meristats fetch` can download it. |
 | `trainer_python` | The Python that has PyTorch, when it is not the Python of meristats. Optional. |
-| `lichess_user` | The Lichess account whose games the nightly cycle learns from. Optional. |
 | `networks_branch` | The branch of the engine repository that holds the networks. Default `nightly-networks`. |
 | `anchor_positions` | A data file of labelled positions that every night's training includes a sample of. Optional. |
 | `leela_positions` | A data file from `leela convert`, of which every night's training includes a sample. Optional. |
@@ -50,7 +49,6 @@ is not committed, because it holds the paths of one machine.
 | `run match` | Plays two engines against each other, with a sequential test. |
 | `run ladder` | Plays Stockfish at several levels and fits a rating. |
 | `run positions` | Plays the engine against itself and writes labelled positions. |
-| `run reanalyse` | Searches the games of the Lichess account again, deeper, and writes training data, mistakes and experience. |
 | `run train` | Trains a network from labelled positions, and checks that the engine loads it. `--hidden N` trains a network of another width, with an engine built for it. |
 | `run networks SPEC` | Trains candidate networks of several shapes, measures their speed and plays them against the deployed engine. |
 | `run job` | Builds and runs a C++ tool from `tools/` against the engine at a commit. |
@@ -61,8 +59,6 @@ is not committed, because it holds the paths of one machine.
 | `publish`, `serve` | Write the site, and serve it on this computer. |
 | `leela fetch RUN` | Downloads an even sample of the tars of Leela Chess Zero from a folder of storage.lczero.org. |
 | `leela convert OUT TAR...` | Turns the tars into training positions. |
-| `lichess sync` | Stores the new games of the account in the data folder. |
-| `experience info FILE` | Prints the size of an experience file. |
 | `network source` | Writes a network file as the C++ source of the engine. |
 | `nightly` | Runs the nightly cycle. |
 | `fetch stockfish`, `fetch book` | Download Stockfish and the opening book, with their hashes checked. |
@@ -135,16 +131,11 @@ place of a time of day, for a run of several days. It builds the engine at the h
 `networks_branch`, which is the deployed engine, and then:
 
 1. plays the engine against itself for `--selfplay-minutes`
-2. stores the new games of `lichess_user` and searches each position of them again at
-   `--analysis-depth`, which gives quiet positions for training, the mistakes (moves that gave
-   away at least 100 centipawns) and the best moves for the experience file
-3. merges the best moves into `data_dir/experience/experience.bin`, which the engine reads with
-   its option `ExperienceFile`, keeping the deeper analysis of a position
-4. stores the night in the replay buffer, `data_dir/replay`, and writes the training file from
-   the night, a sample of the nights before it, the mistakes of all nights (three times each) and
-   a sample of `anchor_positions`
-5. trains a network that starts from the deployed one, at a low learning rate
-6. plays the new network against the deployed one at `--match-nodes` nodes a move, with a
+2. stores the night in the replay buffer, `data_dir/replay`, and writes the training file from
+   the night, a sample of the nights before it, a sample of `anchor_positions` and, when
+   `leela_positions` is set, a sample of those
+3. trains a network that starts from the deployed one, at a low learning rate
+4. plays the new network against the deployed one at `--match-nodes` nodes a move, with a
    sequential test
 
 The night ends with the status `passed` when the test accepts the new network, and
