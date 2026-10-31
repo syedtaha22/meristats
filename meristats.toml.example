@@ -12,9 +12,20 @@ workers = 1
 # The Python that has PyTorch, when it is not the Python of meristats. Optional.
 trainer_python = "/path/to/trainer/bin/python"
 
-# The nightly cycle. Optional.
+# The training cycles. Optional.
 networks_branch = "nightly-networks"
 anchor_positions = "/path/to/anchor-positions.txt"
 
 # Positions of Leela Chess Zero, from `meristats leela convert`. Optional.
 leela_positions = "/path/to/leela-positions.txt"
+
+# The release steps of `meristats train`. Optional, and each step is skipped when its settings are
+# missing. The App pushes the networks to the engine repository and the site to its own.
+engine_repository = "owner/engine"
+site_repository = "owner/meristats"
+site_worktree = "/path/to/meristats/site-build"
+app_id = 123456
+app_key = "/path/to/app.pem"
+commit_name = "app-name[bot]"
+commit_email = "123456+app-name[bot]@users.noreply.github.com"
+mail_settings = "/path/to/mail.env"

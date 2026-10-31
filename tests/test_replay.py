@@ -28,7 +28,7 @@ def lines(count, tag, games=5):
     return "".join(f"{FEN}\t1\t{i % games}\t{tag}{i}\n" for i in range(count))
 
 
-def test_a_night_is_stored_once_and_read_back(tmp_path):
+def test_a_chunk_is_stored_once_and_read_back(tmp_path):
     buffer = replay.Buffer(tmp_path)
     path = buffer.add("selfplay", "2026-10-23", lines(7, "s"))
     assert path.name == "2026-10-23.txt.zst"
@@ -41,14 +41,14 @@ def test_a_night_is_stored_once_and_read_back(tmp_path):
         buffer.add("unknown", "2026-10-23", "x")
 
 
-def test_the_files_of_the_nights_before_are_listed_oldest_first(tmp_path):
+def test_the_files_are_listed_oldest_first(tmp_path):
     buffer = replay.Buffer(tmp_path)
 
-    for night in ("2026-10-22", "2026-10-21", "2026-10-23"):
-        buffer.add("selfplay", night, lines(2, night))
+    for name in ("2026-10-22", "2026-10-21", "2026-10-23"):
+        buffer.add("selfplay", name, lines(2, name))
 
-    names = [p.name for p in buffer.files(["selfplay"], before="2026-10-23")]
-    assert names == ["2026-10-21.txt.zst", "2026-10-22.txt.zst"]
+    names = [p.name for p in buffer.files(["selfplay"])]
+    assert names == ["2026-10-21.txt.zst", "2026-10-22.txt.zst", "2026-10-23.txt.zst"]
 
 
 def test_a_sample_is_uniform_and_has_the_size_that_was_asked_for():
@@ -59,7 +59,7 @@ def test_a_sample_is_uniform_and_has_the_size_that_was_asked_for():
     assert replay.sample(iter(["a", "b"]), 5, rng) == ["a", "b"]
 
 
-def test_the_training_file_has_the_night_the_history_and_the_anchor(tmp_path):
+def test_the_training_file_has_the_new_positions_the_history_and_the_anchor(tmp_path):
     buffer = replay.Buffer(tmp_path / "buffer")
     buffer.add("selfplay", "2026-10-22", lines(40, "old"))
     buffer.add("selfplay", "2026-10-23", lines(10, "new"))
@@ -69,12 +69,12 @@ def test_the_training_file_has_the_night_the_history_and_the_anchor(tmp_path):
     counts = replay.assemble(
         out,
         buffer,
-        "2026-10-23",
+        "2026-10-22",
         anchor=anchor,
         history_lines=20,
         anchor_lines=12,
     )
-    assert counts == {"night": 10, "history": 20, "anchor": 12}
+    assert counts == {"new": 10, "history": 20, "anchor": 12}
     rows = [line.split("\t") for line in out.read_text().splitlines()]
     assert len(rows) == 42
     assert sum(1 for r in rows if r[3].startswith("new")) == 10
@@ -82,11 +82,11 @@ def test_the_training_file_has_the_night_the_history_and_the_anchor(tmp_path):
     assert all(r[3].startswith(("old", "new", "anchor")) for r in rows)
 
 
-def test_a_night_without_an_anchor_or_a_history_still_gives_a_file(tmp_path):
+def test_new_positions_without_an_anchor_or_a_history_still_give_a_file(tmp_path):
     buffer = replay.Buffer(tmp_path / "buffer")
     buffer.add("selfplay", "2026-10-23", lines(4, "new"))
-    counts = replay.assemble(tmp_path / "t.txt", buffer, "2026-10-23", anchor=None)
-    assert counts == {"night": 4, "history": 0}
+    counts = replay.assemble(tmp_path / "t.txt", buffer, "", anchor=None)
+    assert counts == {"new": 4, "history": 0}
 
 
 def test_the_leela_positions_are_sampled_into_the_training_file_when_a_file_is_given(tmp_path):
@@ -95,11 +95,11 @@ def test_the_leela_positions_are_sampled_into_the_training_file_when_a_file_is_g
     leela = tmp_path / "leela.txt"
     leela.write_text(lines(30, "leela", games=9))
     out = tmp_path / "t.txt"
-    counts = replay.assemble(out, buffer, "2026-10-23", anchor=None, leela=leela, leela_lines=11)
+    counts = replay.assemble(out, buffer, "", anchor=None, leela=leela, leela_lines=11)
 
-    assert counts == {"night": 4, "history": 0, "leela": 11}
+    assert counts == {"new": 4, "history": 0, "leela": 11}
     assert sum(1 for line in out.read_text().splitlines() if "\tleela" in line) == 11
-    assert replay.assemble(out, buffer, "2026-10-23", anchor=None, leela=leela, leela_lines=0) == {
-        "night": 4,
+    assert replay.assemble(out, buffer, "", anchor=None, leela=leela, leela_lines=0) == {
+        "new": 4,
         "history": 0,
     }

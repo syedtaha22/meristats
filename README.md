@@ -35,8 +35,14 @@ is not committed, because it holds the paths of one machine.
 | `stockfish` | The path of Stockfish, for the ladder. Optional, and `meristats fetch` can download it. |
 | `trainer_python` | The Python that has PyTorch, when it is not the Python of meristats. Optional. |
 | `networks_branch` | The branch of the engine repository that holds the networks. Default `nightly-networks`. |
-| `anchor_positions` | A data file of labelled positions that every night's training includes a sample of. Optional. |
-| `leela_positions` | A data file from `leela convert`, of which every night's training includes a sample. Optional. |
+| `anchor_positions` | A data file of labelled positions that every training includes a sample of. Optional. |
+| `leela_positions` | A data file from `leela convert`, of which every training includes a sample. Optional. |
+| `engine_repository` | `OWNER/NAME` of the engine repository on GitHub, for the pull request. Optional. |
+| `site_repository` | `OWNER/NAME` of the repository of the site. Optional. |
+| `site_worktree` | The worktree of the branch `site`, which `meristats train` publishes into. Optional. |
+| `app_id`, `app_key` | The id of the GitHub App that pushes, and the path of its private key. Optional. |
+| `commit_name`, `commit_email` | The author of the commits of the App. Optional. |
+| `mail_settings` | A file of lines `SMTP_USER=`, `SMTP_PASSWORD=` and `MAIL_TO=`, for the mail after a cycle. Optional. |
 
 ## Commands
 
@@ -60,7 +66,8 @@ is not committed, because it holds the paths of one machine.
 | `leela fetch RUN` | Downloads an even sample of the tars of Leela Chess Zero from a folder of storage.lczero.org. |
 | `leela convert OUT TAR...` | Turns the tars into training positions. |
 | `network source` | Writes a network file as the C++ source of the engine. |
-| `nightly` | Runs the nightly cycle. |
+| `train [DURATION]` | Trains for a time (`8h`, `90m`, `2d`) or until Ctrl-C, as cycles of data, training and eval, and then publishes. |
+| `release check`, `sync`, `promote SUMMARY`, `site` | One step of the release: check the App, sync the branch of the networks with `main`, commit a network, publish the site. |
 | `fetch stockfish`, `fetch book` | Download Stockfish and the opening book, with their hashes checked. |
 | `backup DEST`, `verify` | Copy the data folder, and check every blob against its hash. |
 | `merge DIR` | Add the runs, blobs and pins of another data folder that this one lacks. |
@@ -124,24 +131,33 @@ The last command, and `run match` with `--a-eval-file`, measure a network before
 into the engine by hand. `train_policy` and `build_book` are C++ tools, because they use the
 evaluation, the move features and the position hash of the engine.
 
-## Nightly cycle
+## Training cycles
 
-`meristats nightly` is one night of learning for the engine. `--hours N` ends it after N hours, in
-place of a time of day, for a run of several days. It builds the engine at the head of
-`networks_branch`, which is the deployed engine, and then:
+`meristats train 8h` trains for 8 hours, and `meristats train` trains until Ctrl-C. It runs cycles
+one after the other. A cycle has three steps:
 
-1. plays the engine against itself for `--selfplay-minutes`
-2. stores the night in the replay buffer, `data_dir/replay`, and writes the training file from
-   the night, a sample of the nights before it, a sample of `anchor_positions` and, when
-   `leela_positions` is set, a sample of those
-3. trains a network that starts from the deployed one, at a low learning rate
-4. plays the new network against the deployed one at `--match-nodes` nodes a move, with a
-   sequential test
+1. **Data.** The engine at the head of `networks_branch`, which is the deployed engine, plays itself
+   at `--selfplay-depth`, in chunks of `--chunk-minutes`. Every chunk is stored in the replay
+   buffer, `data_dir/replay`, when it is finished, with its own seed. The step ends when the
+   positions that no test has seen reach `--test-after`, or at the end of the duration.
+2. **Train.** A network starts from the deployed one and trains on all the new positions, a sample
+   of `--history-lines` older ones, a sample of `anchor_positions` and, when set, a sample of
+   `leela_positions`. It stops when the held-out loss has not improved for `--patience` epochs, or
+   after `--epochs`.
+3. **Eval.** The new network plays the deployed one at `--match-nodes` nodes a move, in a
+   sequential test with Elo bounds `--elo0` and `--elo1`, for as long as the test needs.
 
-The night ends with the status `passed` when the test accepts the new network, and
-`summary.json` then names `candidate` and `deployed`. The night does not change the engine
-repository. A night that reaches its `--deadline` ends with the status `late`. Every stage is a
-run in the database, and `data_dir/nightly/<night>/summary.json` holds the numbers of the night.
+The cycle ends with the status `passed` when the test accepts the network, and `rejected` when it
+does not. After a rejection the next cycle waits for `--growth` times as many new positions. The
+numbers that outlive a cycle are in `data_dir/train-state.json`, and `data_dir/cycles/<id>/` has
+the summary and the files of each cycle. Ctrl-C ends the step that is running at once, and the
+chunks that were finished stay in the buffer.
+
+With the release settings in `meristats.toml`, the branch of the networks is brought up to date with
+`main` before a cycle (`release sync`). A network that passed is committed by the App and put in
+the pull request of the engine repository (`release promote`), and a mail reports every cycle. At
+the end, the match of every cycle is pinned on the page Matches, and the site is committed and
+pushed by the App (`release site`). Two cycles in a row that fail stop the training.
 
 ## Networks of other shapes
 
@@ -176,7 +192,7 @@ that is in it is not run again.
 `meristats leela fetch k2hybrid-bt4tf13g-v7op1 --count 60` downloads 60 tars (about 260 MB each),
 spread evenly over the run so that the sample has games of all its stages, and `meristats leela
 convert leela.txt TAR...` turns them into positions in the format of the `positions` protocol.
-Setting `leela_positions` to that file adds a sample of it to the training data of a night.
+Setting `leela_positions` to that file adds a sample of it to the training data of every cycle.
 
 ## Tests
 

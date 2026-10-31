@@ -30,7 +30,7 @@ version = { attr = "meristats.__version__" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-meristats = ["static/*", "templates/*", "migrations/*", "cmake/*"]
+meristats = ["static/*", "templates/*", "migrations/*", "cmake/*", "release/assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

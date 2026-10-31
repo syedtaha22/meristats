@@ -148,6 +148,7 @@ def run(
     hidden: int = nnue.HIDDEN,
     device: str | None = None,
     workers: int | None = None,
+    patience: int = 0,
     allow_dirty: bool = False,
     framework=...,
     progress=lambda text: print(text, file=sys.stderr, flush=True),
@@ -191,6 +192,7 @@ def run(
             "init": init,
             "hidden": hidden,
             "device": device,
+            "patience": patience or None,
         },
         progress,
     )
@@ -208,6 +210,7 @@ def run(
     summary = {
         "positions": result["positions"],
         "best_held": result["best_held"],
+        "start_held": result["start_held"],
         "best_epoch": held.index(min(held)) + 1,
         "epochs": result["epochs"],
         "seconds": {
@@ -236,6 +239,7 @@ def run(
         "max_score": max_score,
         "limit": limit,
         "hidden": result["hidden"],
+        "patience": patience,
         "data_sha256": digest,
         "init_sha256": None if init is None else file_digest(init),
     }

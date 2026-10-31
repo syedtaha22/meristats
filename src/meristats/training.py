@@ -223,6 +223,7 @@ class Result:
     quantized_difference: float | None = None
     quantized_magnitude: float | None = None
     checked: int = 0
+    start_held: float | None = None
 
 
 def train(
@@ -237,11 +238,14 @@ def train(
     device: str | None = None,
     log: Callable[[str], None] = print,
     seconds_loading: float = 0.0,
+    patience: int = 0,
 ) -> Result:
     """
     Trains a network with Adam on the positions that are not held out, and keeps the weights of the
     epoch with the lowest held-out error. The learning rate falls from `lr` to a tenth of it over
-    the epochs. Returns the best network, quantized.
+    the epochs. With a `patience` above 0 the training stops after that many epochs without a new
+    lowest held-out error. Returns the best network, quantized, and the held-out error of the
+    starting weights.
     """
     import torch
     import torch.nn.functional as functional
@@ -324,7 +328,9 @@ def train(
     )
     best, best_state = 1e9, None
     history = []
-    log(f"start: held-out loss {held_loss():.5f}")
+    start_held = held_loss()
+    best_epoch = 0
+    log(f"start: held-out loss {start_held:.5f}")
     started = time.monotonic()
 
     for epoch in range(1, epochs + 1):
@@ -360,13 +366,19 @@ def train(
 
         if held < best:
             best = held
+            best_epoch = epoch
             best_state = [p.detach().cpu().numpy().copy() for p in (w, b, wo, bo)]
+
+        if patience and epoch - best_epoch >= patience:
+            log(f"stopped: no new lowest held-out loss for {patience} epochs")
+            break
 
     training_seconds = time.monotonic() - started
     network = nnue.quantize(
         best_state[0][: nnue.INPUTS], best_state[1], best_state[2], best_state[3]
     )
     result = Result(network, best, history, seconds_loading, training_seconds, device)
+    result.start_held = start_held
     _compare(result, best_state, data.held_fens)
     log(
         f"quantized against float: mean difference {result.quantized_difference:.2f}cp over "

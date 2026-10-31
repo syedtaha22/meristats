@@ -49,6 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--init", type=Path)
     parser.add_argument("--hidden", type=int, default=nnue.HIDDEN)
     parser.add_argument("--device")
+    parser.add_argument("--patience", type=int, default=0)
     args = parser.parse_args(argv)
     start = nnue.read_network(args.init) if args.init else None
 
@@ -82,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
         device=args.device,
         log=say,
         seconds_loading=loading,
+        patience=args.patience,
     )
     import torch
 
@@ -96,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
                     "held_out": int(positions.held.sum()),
                 },
                 "best_held": result.best_held,
+                "start_held": result.start_held,
                 "epochs": result.epochs,
                 "seconds_loading": result.seconds_loading,
                 "seconds_training": result.seconds_training,

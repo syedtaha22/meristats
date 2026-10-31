@@ -16,12 +16,12 @@
 
 
 """
-The replay buffer: the labelled positions of every night, kept so that each night's training can
-see the days before it, and the assembly of a training file from the buffer and the anchor data.
+The replay buffer: the labelled positions of every chunk of self-play, kept so that each training
+can see the earlier ones, and the assembly of a training file from the buffer and the anchor data.
 
-The buffer is a folder of compressed files, `<kind>/<night>.txt.zst`, in the format of the
-`positions` protocol. The one kind is `selfplay` (games of the engine against itself). Files are
-written once.
+The buffer is a folder of compressed files, `<kind>/<name>.txt.zst`, in the format of the
+`positions` protocol. The one kind is `selfplay` (games of the engine against itself). The name
+sorts by time, and files are written once.
 """
 
 import io
@@ -86,18 +86,18 @@ class Buffer:
     def __init__(self, directory: Path):
         self.directory = Path(directory)
 
-    def path(self, kind: str, night: str) -> Path:
-        return self.directory / kind / f"{night}.txt.zst"
+    def path(self, kind: str, name: str) -> Path:
+        return self.directory / kind / f"{name}.txt.zst"
 
-    def add(self, kind: str, night: str, text: str) -> Path:
+    def add(self, kind: str, name: str, text: str) -> Path:
         """
-        Stores the lines of one night. A night that is in the buffer is left as it is, and
-        refused, because a stored file never changes.
+        Stores the lines of one chunk. A name that is in the buffer is left as it is, and refused,
+        because a stored file never changes.
         """
         if kind not in KINDS:
             raise ReplayError(f"not a kind of the buffer: {kind}")
 
-        path = self.path(kind, night)
+        path = self.path(kind, name)
 
         if path.exists():
             raise ReplayError(f"{path} is in the buffer already")
@@ -108,18 +108,14 @@ class Buffer:
         temporary.replace(path)
         return path
 
-    def files(self, kinds: Iterable[str], *, before: str | None = None) -> list[Path]:
+    def files(self, kinds: Iterable[str]) -> list[Path]:
         """
-        The files of some kinds, oldest first. With `before`, only the nights that sort earlier.
+        The files of some kinds, oldest first.
         """
         found = []
 
         for kind in kinds:
-            for path in sorted((self.directory / kind).glob("*.txt.zst")):
-                night = path.name.removesuffix(".txt.zst")
-
-                if before is None or night < before:
-                    found.append(path)
+            found += sorted((self.directory / kind).glob("*.txt.zst"))
 
         return found
 
@@ -127,7 +123,7 @@ class Buffer:
 def assemble(
     out: Path,
     buffer: Buffer,
-    night: str,
+    after: str,
     *,
     anchor: Path | None,
     leela: Path | None = None,
@@ -137,18 +133,19 @@ def assemble(
     leela_lines: int = 1_000_000,
 ) -> dict:
     """
-    Writes the training file of a night to `out`. It holds all of the night's positions, a sample
-    of the nights before it, a sample of the anchor data, and a sample of the positions of Leela
-    Chess Zero (see `leela.py`) when a file of them is given. The lines of a game keep one game
-    number, so that the games that the trainer holds out are whole games. The positions of the
-    night are copied one by one, since a long night has millions of them.
+    Writes the training file to `out`. It holds all of the new positions, which are the files of
+    the buffer that sort after `after`, a sample of the older ones, a sample of the anchor data,
+    and a sample of the positions of Leela Chess Zero (see `leela.py`) when a file of them is given.
+    The lines of a game keep one game number, so that the games that the trainer holds out are
+    whole games. The new positions are copied one by one, since there can be millions of them.
     """
     rng = random.Random(seed)
-    tonight_file = buffer.path("selfplay", night)
-    tonight = read_lines(tonight_file) if tonight_file.exists() else iter(())
-    past = buffer.files(("selfplay",), before=night)
+    files = buffer.files(("selfplay",))
+    new = [path for path in files if path.name.removesuffix(".txt.zst") > after]
+    past = [path for path in files if path.name.removesuffix(".txt.zst") <= after]
+    fresh = (line for path in new for line in read_lines(path))
     history = sample((line for path in past for line in read_lines(path)), history_lines, rng)
-    sources: list[tuple[str, Iterable[str]]] = [("night", tonight), ("history", history)]
+    sources: list[tuple[str, Iterable[str]]] = [("new", fresh), ("history", history)]
 
     for name, path, count in (("anchor", anchor, anchor_lines), ("leela", leela, leela_lines)):
         if path is not None and Path(path).exists() and count > 0:

@@ -45,6 +45,14 @@ class Config:
     networks_branch: str = "nightly-networks"
     anchor_positions: Path | None = None
     leela_positions: Path | None = None
+    engine_repository: str | None = None
+    site_repository: str | None = None
+    site_worktree: Path | None = None
+    app_id: int | None = None
+    app_key: Path | None = None
+    commit_name: str | None = None
+    commit_email: str | None = None
+    mail_settings: Path | None = None
 
 
 def _path(value: str) -> Path:
@@ -97,4 +105,12 @@ def load(path: Path | None = None) -> Config:
         networks_branch=raw.get("networks_branch", "nightly-networks"),
         anchor_positions=_path(raw["anchor_positions"]) if raw.get("anchor_positions") else None,
         leela_positions=_path(raw["leela_positions"]) if raw.get("leela_positions") else None,
+        engine_repository=raw.get("engine_repository") or None,
+        site_repository=raw.get("site_repository") or None,
+        site_worktree=_path(raw["site_worktree"]) if raw.get("site_worktree") else None,
+        app_id=raw.get("app_id") or None,
+        app_key=_path(raw["app_key"]) if raw.get("app_key") else None,
+        commit_name=raw.get("commit_name") or None,
+        commit_email=raw.get("commit_email") or None,
+        mail_settings=_path(raw["mail_settings"]) if raw.get("mail_settings") else None,
     )

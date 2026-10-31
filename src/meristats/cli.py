@@ -16,11 +16,10 @@
 
 import argparse
 import importlib
+import json
 import shutil
 import subprocess
 import sys
-import time
-from datetime import datetime, timedelta
 from pathlib import Path
 
 from meristats import (
@@ -28,7 +27,7 @@ from meristats import (
     datasets,
     external,
     leela,
-    nightly,
+    cycle,
     nnue,
 )
 from meristats.build import BuildError, build_engine, width_defines
@@ -48,6 +47,9 @@ from meristats.preflight import PreflightError
 from meristats import magics
 from meristats.publish import publish
 from meristats.serve import make_server
+from meristats import session
+from meristats.release import github_app, promote, settings as release_settings, site, sync
+from meristats.release.common import ReleaseError, auth_environment
 from meristats.report import (
     ReportError,
     compare_puzzles,
@@ -382,48 +384,65 @@ def _leela(args, config: Config) -> int:
     return 0
 
 
-def _deadline(text: str, hours: float | None = None) -> float:
-    """
-    The time of the end of a night, as a time from `time.time()`: `hours` from now when they are
-    given, and otherwise the next time of day `HH:MM`.
-    """
-    if hours is not None:
-        return time.time() + hours * 3600
-
-    hour, minute = (int(part) for part in text.split(":"))
-    now = datetime.now()
-    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-
-    if target <= now:
-        target += timedelta(days=1)
-
-    return target.timestamp()
-
-
-def _nightly(args, config: Config, store: Store) -> int:
-    settings = nightly.Settings(
-        deadline=_deadline(args.deadline, args.hours),
-        night=args.night,
-        selfplay_minutes=args.selfplay_minutes,
+def _train(args, config: Config, store: Store) -> int:
+    base = cycle.Settings(
+        test_after=args.test_after,
+        growth=args.growth,
+        chunk_minutes=args.chunk_minutes,
         selfplay_depth=args.selfplay_depth,
         selfplay_skip=args.selfplay_skip,
+        epochs=args.epochs,
+        patience=args.patience,
+        lr=args.lr,
         anchor_lines=args.anchor_lines,
         leela_lines=args.leela_lines,
         history_lines=args.history_lines,
-        epochs=args.epochs,
-        lr=args.lr,
         match_nodes=args.match_nodes,
-        match_minutes=args.match_minutes,
         rounds=args.rounds,
         elo0=args.elo0,
         elo1=args.elo1,
         seed=args.seed,
         allow_dirty=args.allow_dirty,
     )
-    summary = nightly.run(config, store, settings, book=_book(config, None))
-    print(nightly.format_summary(summary))
-    print(f"summary: {Path(config.data_dir) / 'nightly' / summary['night'] / 'summary.json'}")
-    return 1 if summary["status"] == "failed" else 0
+
+    try:
+        duration = session.seconds(args.duration) if args.duration else None
+    except ValueError as error:
+        raise cycle.CycleError(str(error)) from error
+
+    return session.run(
+        config,
+        store,
+        base,
+        duration=duration,
+        book=_book(config, None),
+        publish=not args.no_publish,
+        send_mail=not args.no_mail,
+    )
+
+
+def _release(args, config: Config, store: Store) -> int:
+    repository = config.site_repository if args.action == "site" else config.engine_repository
+    release_settings.require(config, "app_id", "app_key")
+    token = session.token_of(config, repository or "")
+
+    if args.action == "check":
+        slug, identity = github_app.app_identity(config.app_id, config.app_key)
+        print(f"app: {slug}[bot] ({identity})")
+        reply = github_app.Api(token).request("GET", "/installation/repositories")
+        print("repositories: " + ", ".join(r["full_name"] for r in reply.get("repositories", [])))
+    elif args.action == "sync":
+        target = release_settings.target_of(config)
+        print(sync.sync(target, github_app.Api(token), auth_environment(token)))
+    elif args.action == "promote":
+        target = release_settings.target_of(config)
+        summary = json.loads(args.summary.read_text())
+        print(promote.promote(summary, target, github_app.Api(token), auth_environment(token)))
+    else:
+        commit = site.publish(release_settings.site_of(config), store, auth_environment(token))
+        print(commit or "nothing changed")
+
+    return 0
 
 
 def _run_networks(args, config: Config, store: Store) -> int:
@@ -461,6 +480,7 @@ def _run_train(args, config: Config, store: Store) -> int:
         hidden=args.hidden,
         device=args.device,
         workers=args.workers,
+        patience=args.patience,
         allow_dirty=args.allow_dirty,
     )
     seconds = summary["seconds"]
@@ -687,35 +707,52 @@ def build_parser() -> argparse.ArgumentParser:
     network_parser.add_argument("action", choices=["source"])
     network_parser.add_argument("network", type=Path, help="the network file")
     network_parser.add_argument("--out", type=Path, required=True, help="the C++ file to write")
-    nightly_parser = commands.add_parser("nightly", help="run the nightly cycle")
-    nightly_parser.add_argument("--deadline", default="07:00", help="HH:MM, the next one (07:00)")
-    nightly_parser.add_argument(
-        "--hours", type=float, help="end after this many hours from now, instead of at --deadline"
+    train_parser = commands.add_parser(
+        "train", help="train for a time, or until Ctrl-C, then publish the matches"
     )
-    nightly_parser.add_argument("--night", default="", help="a name for the night (the date)")
-    nightly_parser.add_argument("--selfplay-minutes", type=float, default=60)
-    nightly_parser.add_argument("--selfplay-depth", type=int, default=9)
-    nightly_parser.add_argument(
-        "--selfplay-skip", type=int, default=3, help="keep a position every N plies"
+    train_parser.add_argument(
+        "duration", nargs="?", help="how long: 8h, 90m, 2d (default: until Ctrl-C)"
     )
-    nightly_parser.add_argument("--epochs", type=int, default=4)
-    nightly_parser.add_argument("--lr", type=float, default=0.0002)
-    nightly_parser.add_argument(
-        "--anchor-lines", type=int, default=1_000_000, help="positions of the anchor data"
+    train_parser.add_argument(
+        "--test-after",
+        type=int,
+        default=cycle.Settings.test_after,
+        help="new positions to generate before the first test",
     )
-    nightly_parser.add_argument(
-        "--leela-lines", type=int, default=1_000_000, help="positions of Leela (leela_positions)"
+    train_parser.add_argument(
+        "--growth", type=float, default=cycle.Settings.growth,
+        help="how much the number of new positions grows after a cycle that is rejected",
     )
-    nightly_parser.add_argument(
-        "--history-lines", type=int, default=1_500_000, help="positions of the nights before"
+    train_parser.add_argument("--chunk-minutes", type=float, default=cycle.Settings.chunk_minutes)
+    train_parser.add_argument("--selfplay-depth", type=int, default=cycle.Settings.selfplay_depth)
+    train_parser.add_argument(
+        "--selfplay-skip", type=int, default=cycle.Settings.selfplay_skip,
+        help="keep a position every N plies",
     )
-    nightly_parser.add_argument("--match-nodes", type=int, default=50000)
-    nightly_parser.add_argument("--match-minutes", type=float, default=120)
-    nightly_parser.add_argument("--rounds", type=int, default=nightly.Settings.rounds)
-    nightly_parser.add_argument("--elo0", type=float, default=0.0)
-    nightly_parser.add_argument("--elo1", type=float, default=10.0)
-    nightly_parser.add_argument("--seed", type=int, default=1)
-    nightly_parser.add_argument("--allow-dirty", action="store_true")
+    train_parser.add_argument("--epochs", type=int, default=cycle.Settings.epochs, help="at most")
+    train_parser.add_argument(
+        "--patience", type=int, default=cycle.Settings.patience,
+        help="stop after this many epochs without a new lowest held-out loss",
+    )
+    train_parser.add_argument("--lr", type=float, default=cycle.Settings.lr)
+    train_parser.add_argument("--anchor-lines", type=int, default=cycle.Settings.anchor_lines)
+    train_parser.add_argument("--leela-lines", type=int, default=cycle.Settings.leela_lines)
+    train_parser.add_argument("--history-lines", type=int, default=cycle.Settings.history_lines)
+    train_parser.add_argument("--match-nodes", type=int, default=cycle.Settings.match_nodes)
+    train_parser.add_argument("--rounds", type=int, default=cycle.Settings.rounds)
+    train_parser.add_argument("--elo0", type=float, default=cycle.Settings.elo0)
+    train_parser.add_argument("--elo1", type=float, default=cycle.Settings.elo1)
+    train_parser.add_argument("--seed", type=int, default=cycle.Settings.seed)
+    train_parser.add_argument("--no-publish", action="store_true", help="leave the site alone")
+    train_parser.add_argument("--no-mail", action="store_true", help="send no mail")
+    train_parser.add_argument("--allow-dirty", action="store_true")
+    release_parser = commands.add_parser(
+        "release", help="one step of the release: check the App, sync the branch, promote, site"
+    )
+    release_parser.add_argument("action", choices=["check", "sync", "promote", "site"])
+    release_parser.add_argument(
+        "summary", nargs="?", type=Path, help="the summary.json of the cycle (promote)"
+    )
     run_parser = commands.add_parser("run", help="run a protocol")
     protocols = run_parser.add_subparsers(dest="protocol", required=True)
 
@@ -822,6 +859,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     train.add_argument("--device", help="cuda or cpu; the default is cuda when there is one")
     train.add_argument("--workers", type=int, help="processes that read the data")
+    train.add_argument(
+        "--patience", type=int, default=0,
+        help="stop after this many epochs without a new lowest held-out loss (0: never)",
+    )
     train.add_argument("--allow-dirty", action="store_true")
 
     job = protocols.add_parser("job", help="build and run a training or tuning tool")
@@ -985,8 +1026,10 @@ def main(argv: list[str] | None = None) -> int:
                 return _leela(args, config)
             elif args.command == "network":
                 args.out.write_text(nnue.source_text(nnue.read_network(args.network)))
-            elif args.command == "nightly":
-                return _nightly(args, config, store)
+            elif args.command == "train":
+                return _train(args, config, store)
+            elif args.command == "release":
+                return _release(args, config, store)
             elif args.command == "pin":
                 if args.label and len(args.run_ids) > 1:
                     raise ReportError("--label names one run, so pin several runs without it")
@@ -1064,7 +1107,9 @@ def main(argv: list[str] | None = None) -> int:
         EngineError,
         leela.LeelaError,
         nnue.NetworkError,
-        nightly.NightlyError,
+        cycle.CycleError,
+        ReleaseError,
+        github_app.GitHubError,
         networks_protocol.NetworksError,
         train_protocol.TrainingError,
     ) as error:

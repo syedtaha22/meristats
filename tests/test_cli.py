@@ -897,10 +897,11 @@ def test_the_leela_command_converts_tars_and_says_how_many_positions_it_kept(
     assert len(out.read_text().splitlines()) == 20
 
 
-def test_a_night_can_end_after_some_hours_or_at_a_time_of_day():
-    import time
+def test_training_takes_a_duration_or_none_and_the_settings_of_a_cycle():
+    parser = cli.build_parser()
+    timed = parser.parse_args(["train", "8h", "--test-after", "123", "--no-publish"])
+    open_ended = parser.parse_args(["train"])
 
-    before = time.time()
-
-    assert 39.9 * 3600 < cli._deadline("07:00", 40) - before < 40.1 * 3600
-    assert 0 < cli._deadline("07:00") - before <= 24 * 3600
+    assert timed.duration == "8h" and timed.test_after == 123 and timed.no_publish
+    assert open_ended.duration is None and open_ended.patience == 1
+    assert parser.parse_args(["release", "promote", "s.json"]).action == "promote"

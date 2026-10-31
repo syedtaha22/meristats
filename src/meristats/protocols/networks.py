@@ -51,7 +51,7 @@ from pathlib import Path
 from meristats import datasets, nnue
 from meristats.build import BuiltEngine, build_engine, width_defines
 from meristats.config import Config
-from meristats.nightly import committed_network
+from meristats.cycle import committed_network
 from meristats.protocols import match as match_protocol
 from meristats.protocols import train as train_protocol
 from meristats.store import Store
