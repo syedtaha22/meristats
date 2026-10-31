@@ -71,6 +71,15 @@ def token_of(config: Config, repository: str) -> str:
     return github_app.installation_token(config.app_id, config.app_key, repository)
 
 
+def credentials(config: Config):
+    """
+    The environment of git and the client of the API for the engine repository. A token is valid
+    for one hour and a cycle takes longer, so each step asks for its own.
+    """
+    token = token_of(config, config.engine_repository)
+    return auth_environment(token), github_app.Api(token)
+
+
 def results(folder: Path, since: float) -> list[str]:
     """
     One line for each cycle whose summary was written after `since`.
@@ -130,11 +139,9 @@ def run(
                 break
 
             target = settings.target_of(config) if ready else None
-            auth = api = None
 
             if ready:
-                token = token_of(config, config.engine_repository)
-                auth, api = auth_environment(token), github_app.Api(token)
+                auth, api = credentials(config)
                 progress(f"engine clone: {sync.sync(target, api, auth)}")
 
             summary = cycle.run(
@@ -147,11 +154,12 @@ def run(
 
             if summary["status"] == "passed" and ready:
                 try:
+                    auth, api = credentials(config)
                     commit = promote.promote(summary, target, api, auth)
                     progress(f"committed {commit[:9]}")
                 except promote.PullRequestError as problem:
                     commit, error = problem.commit, str(problem)
-                except ReleaseError as problem:
+                except (ReleaseError, github_app.GitHubError) as problem:
                     error = str(problem)
 
                 if error:

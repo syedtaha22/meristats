@@ -135,3 +135,54 @@ def test_a_network_that_passed_is_committed_and_the_commit_is_in_the_mail(setup,
 
     assert "engine clone: reset" in messages
     assert any("c" * 12 in text for text in texts)
+
+
+def test_the_sync_and_the_promotion_use_a_token_each(setup, tmp_path, monkeypatch):
+    config, clock, fakes = setup
+    fakes.verdict = "H1"
+    issued, used = [], []
+    config = Config(**{
+        **config.__dict__, "engine_repository": "o/e", "app_id": 1, "app_key": Path("k"),
+        "commit_name": "bot", "commit_email": "b@x",
+    })
+
+    def token_of(config, repository):
+        issued.append(len(issued))
+        return f"token-{len(issued)}"
+
+    monkeypatch.setattr(session, "token_of", token_of)
+    monkeypatch.setattr(session.sync, "sync", lambda target, api, auth: used.append("sync") or "x")
+    monkeypatch.setattr(
+        promote, "promote", lambda summary, target, api, auth: used.append("promote") or "c" * 40
+    )
+    go((config, clock, fakes), 3600, tmp_path)
+
+    assert used[:2] == ["sync", "promote"]
+    assert len(issued) >= 2
+
+
+def test_a_token_that_cannot_be_issued_for_the_promotion_does_not_stop_the_training(
+    setup, tmp_path, monkeypatch
+):
+    config, clock, fakes = setup
+    fakes.verdict = "H1"
+    messages = []
+    calls = []
+    config = Config(**{
+        **config.__dict__, "engine_repository": "o/e", "app_id": 1, "app_key": Path("k"),
+        "commit_name": "bot", "commit_email": "b@x",
+    })
+
+    def token_of(config, repository):
+        calls.append(1)
+
+        if len(calls) % 2 == 0:
+            raise session.github_app.GitHubError("no token")
+
+        return "tok"
+
+    monkeypatch.setattr(session, "token_of", token_of)
+    monkeypatch.setattr(session.sync, "sync", lambda target, api, auth: "x")
+    status, messages, _ = go((config, clock, fakes), 3600, tmp_path)
+
+    assert "no token" in "\n".join(messages)
