@@ -678,3 +678,33 @@ def test_the_site_is_served_without_the_extension_or_a_trailing_slash(tmp_path, 
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_a_path_in_a_home_folder_is_reduced_to_its_name():
+    assert site._public("/home/someone/data/cycles/c1/candidate.nnue") == "candidate.nnue"
+    assert site._public("EvalFile: /home/someone/data/cycles/c1/candidate.nnue.") == (
+        "EvalFile: candidate.nnue."
+    )
+    assert site._public("in /home/someone/data/meristats/ and /home/someone, ok") == (
+        "in meristats and , ok"
+    )
+    assert site._public(r'{\"EvalFile\": \"/Users/me/x/net.nnue\"}') == (
+        r'{\"EvalFile\": \"net.nnue\"}'
+    )
+    assert site._public("/usr/bin/g++ and /srv/net.nnue") == "/usr/bin/g++ and /srv/net.nnue"
+
+
+def test_no_published_file_names_a_folder_of_the_machine(tmp_path, store):
+    limits = {
+        "limit": {"nodes": 20000},
+        "options_a": {"EvalFile": "/home/someone/meridian-core/data/cycles/c1/candidate.nnue"},
+    }
+    run = add_run(store, limits=limits)
+    store.pin("steps", "Step 10", run)
+    publish(tmp_path, store)
+    files = [path for path in tmp_path.rglob("*") if path.suffix in (".html", ".json")]
+    text = "".join(path.read_text() for path in files)
+
+    assert "candidate.nnue" in text
+    assert "/home/" not in text
+    assert "someone" not in text

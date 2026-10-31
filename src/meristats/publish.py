@@ -27,6 +27,7 @@ from meristats import __version__
 from meristats.store import Store
 
 TITLE = "meristats"
+LOCAL_PATH = re.compile(r"(?:/home|/Users|/root)/[^\s\"'<>\\,;)]+")
 PAGE_SIZES = (10, 25, 50, 100)
 SORT_ICON = (
     '<svg class="sort-icon" viewBox="0 0 10 14" aria-hidden="true">'
@@ -977,6 +978,19 @@ def _clear(out_dir: Path) -> None:
             entry.unlink()
 
 
+def _public(text: str) -> str:
+    """
+    The text with each path in a home folder reduced to its last name, and the folder of the user
+    alone removed, since a published page should not show where the files of a machine are.
+    """
+
+    def short(found: re.Match) -> str:
+        parts = found.group(0).rstrip("/").split("/")
+        return parts[-1] if len(parts) > 3 else ""
+
+    return LOCAL_PATH.sub(short, text)
+
+
 def publish(out_dir: Path, store: Store | None = None) -> list[Path]:
     """
     Writes the site into `out_dir` and returns the paths of the files that it wrote.
@@ -995,7 +1009,7 @@ def publish(out_dir: Path, store: Store | None = None) -> list[Path]:
     def write(name: str, text: str) -> None:
         path = out_dir / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        path.write_text(_public(text), encoding="utf-8")
         written.append(path)
 
     _clear(out_dir)
