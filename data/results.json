@@ -828,6 +828,240 @@
           "version": "8moves_v3"
         },
         "engine": {
+          "bench_nodes": 2094110,
+          "binary_sha256": "e09fd5c013b23f8cd6af618ebb04c38cd4cf7be2940c8b8c1000b9f5c9be3e3b",
+          "build_json": "{\"build_type\":\"Release\",\"cmake_version\":\"cmake version 3.28.3\",\"compiler\":\"/usr/bin/c++\",\"compiler_version\":\"c++ (Ubuntu 12.4.0-2ubuntu1~24.04.1) 12.4.0\",\"cxx_flags_release\":\"-O3 -DNDEBUG\",\"defines\":{}}",
+          "commit_sha": "43f0428def6c3ab8926f920dd2dc280b82bf9ba2",
+          "engine_id": 10,
+          "kind": "meridian",
+          "name": "meridian",
+          "version_text": "Meridian 1.4.0"
+        },
+        "label": "Cycle 2026-10-31 19:25 UTC",
+        "limits": {
+          "b_engine_id": 10,
+          "concurrency": 30,
+          "eval_files": {
+            "a": "88aac2c91e5f068158582855bf61a0a71e4cc902d30526c6c9aa38fb0c4e3ce3"
+          },
+          "limit": {
+            "nodes": 50000
+          },
+          "options_a": {
+            "EvalFile": "candidate.nnue",
+            "Hash": 16,
+            "Threads": 1
+          },
+          "options_b": {
+            "Hash": 16,
+            "Threads": 1
+          },
+          "rounds": 5000,
+          "seed": 7,
+          "sprt": {
+            "alpha": 0.05,
+            "beta": 0.05,
+            "elo0": 0.0,
+            "elo1": 10.0
+          }
+        },
+        "machine": {
+          "cpu_model": "13th Gen Intel(R) Core(TM) i9-13900HX",
+          "fingerprint": "0de87b82166684bd698cd7595f7f44e0428917e86b4dbaf022f463b3034f0716",
+          "json": "{\"architecture\":\"x86_64\",\"cpu_model\":\"13th Gen Intel(R) Core(TM) i9-13900HX\",\"kernel\":\"7.0.0-38-generic\",\"logical_cpus\":32,\"os\":\"Linux-7.0.0-38-generic-x86_64-with-glibc2.39\"}",
+          "kernel": "7.0.0-38-generic",
+          "logical_cpus": 32,
+          "machine_id": 1,
+          "os": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39"
+        },
+        "run": {
+          "code_commit": "d82e1a3ba18d8d3f39df99a2bcdb96e758f0dd35",
+          "code_dirty": 0,
+          "conditions_json": "{\"checks\":[{\"detail\":\"clean\",\"name\":\"framework clean\",\"ok\":true},{\"detail\":\"43f0428def6c3ab8926f920dd2dc280b82bf9ba2\",\"name\":\"engine from a SHA\",\"ok\":true},{\"detail\":\"2094110 nodes now, 2094110 recorded\",\"name\":\"fingerprint\",\"ok\":true},{\"detail\":\"43f0428def6c3ab8926f920dd2dc280b82bf9ba2\",\"name\":\"engine from a SHA\",\"ok\":true},{\"detail\":\"2094110 nodes now, 2094110 recorded\",\"name\":\"fingerprint\",\"ok\":true},{\"detail\":\"8moves_v3.pgn: 5835239f88cc\",\"name\":\"dataset hash\",\"ok\":true},{\"detail\":\"meridian: passed\",\"name\":\"compliance\",\"ok\":true},{\"detail\":\"meridian: passed\",\"name\":\"compliance\",\"ok\":true}],\"samples\":[{\"at\":\"start\",\"frequency\":{\"khz_max\":3900052,\"khz_mean\":1180095,\"khz_min\":799483},\"governor\":\"powersave\",\"load_1min\":21.36669921875,\"power_source\":\"ac\"},{\"at\":\"before\",\"frequency\":{\"khz_max\":2766764,\"khz_mean\":945472,\"khz_min\":799415},\"governor\":\"powersave\",\"load_1min\":19.7353515625,\"power_source\":\"ac\"},{\"at\":\"end\",\"frequency\":{\"khz_max\":5200000,\"khz_mean\":933852,\"khz_min\":683327},\"governor\":\"powersave\",\"load_1min\":27.01953125,\"power_source\":\"ac\"}]}",
+          "config": "default vs default",
+          "dataset_id": 4,
+          "engine_id": 10,
+          "finished_utc": "2026-10-31T23:45:57Z",
+          "grade": "verified",
+          "limits_json": "{\"b_engine_id\":10,\"concurrency\":30,\"eval_files\":{\"a\":\"88aac2c91e5f068158582855bf61a0a71e4cc902d30526c6c9aa38fb0c4e3ce3\"},\"limit\":{\"nodes\":50000},\"options_a\":{\"EvalFile\":\"candidate.nnue\",\"Hash\":16,\"Threads\":1},\"options_b\":{\"Hash\":16,\"Threads\":1},\"rounds\":5000,\"seed\":7,\"sprt\":{\"alpha\":0.05,\"beta\":0.05,\"elo0\":0.0,\"elo1\":10.0}}",
+          "machine_id": 1,
+          "notes": null,
+          "protocol": "match",
+          "protocol_version": 2,
+          "run_id": "20261031T233842Z-match-04987590",
+          "schema_version": 2,
+          "seed": 7,
+          "started_utc": "2026-10-31T23:38:42Z",
+          "status": "complete",
+          "summary_json": "{\"draws\":985,\"elo\":13.575549301506602,\"elo_high\":24.069226341766527,\"elo_low\":3.10657706208124,\"finished\":2663,\"games\":2663,\"losses\":787,\"pairs\":1329,\"pentanomial\":[119,298,429,325,158],\"score\":0.5195268494179497,\"score_high\":0.5345830942052431,\"score_low\":0.5044706046306563,\"sprt\":{\"agree\":true,\"alpha\":0.05,\"beta\":0.05,\"bounds\":[-2.9444389791664403,2.9444389791664403],\"elo0\":0.0,\"elo1\":10.0,\"fastchess_verdict\":\"H1\",\"llr\":2.952080281284971,\"verdict\":\"H1\"},\"terminations\":{\"normal\":2663},\"timed_out\":false,\"wins\":891}",
+          "supersedes": null
+        },
+        "summary": {
+          "draws": 985,
+          "elo": 13.575549301506602,
+          "elo_high": 24.069226341766527,
+          "elo_low": 3.10657706208124,
+          "finished": 2663,
+          "games": 2663,
+          "losses": 787,
+          "pairs": 1329,
+          "pentanomial": [
+            119,
+            298,
+            429,
+            325,
+            158
+          ],
+          "score": 0.5195268494179497,
+          "score_high": 0.5345830942052431,
+          "score_low": 0.5044706046306563,
+          "sprt": {
+            "agree": true,
+            "alpha": 0.05,
+            "beta": 0.05,
+            "bounds": [
+              -2.9444389791664403,
+              2.9444389791664403
+            ],
+            "elo0": 0.0,
+            "elo1": 10.0,
+            "fastchess_verdict": "H1",
+            "llr": 2.952080281284971,
+            "verdict": "H1"
+          },
+          "terminations": {
+            "normal": 2663
+          },
+          "timed_out": false,
+          "wins": 891
+        }
+      },
+      {
+        "dataset": {
+          "dataset_id": 4,
+          "description_json": "{\"file\":\"8moves_v3.pgn\"}",
+          "name": "opening-book",
+          "sha256": "5835239f88cc2c7511b177c32392a69f3ede21819cf0616f80a7f907cd21d17e",
+          "version": "8moves_v3"
+        },
+        "engine": {
+          "bench_nodes": 2013297,
+          "binary_sha256": "86301d9b10ca881cbc8f942d922ee166b8bb52878dbf4e6b1bdb1966f6231fb2",
+          "build_json": "{\"build_type\":\"Release\",\"cmake_version\":\"cmake version 3.28.3\",\"compiler\":\"/usr/bin/c++\",\"compiler_version\":\"c++ (Ubuntu 12.4.0-2ubuntu1~24.04.1) 12.4.0\",\"cxx_flags_release\":\"-O3 -DNDEBUG\",\"defines\":{}}",
+          "commit_sha": "c6c45e20ad5e15ad137bc3a0164b37e1dcf964e1",
+          "engine_id": 11,
+          "kind": "meridian",
+          "name": "meridian",
+          "version_text": "Meridian 1.5.0"
+        },
+        "label": "Cycle 2026-10-31 23:46 UTC",
+        "limits": {
+          "b_engine_id": 11,
+          "concurrency": 30,
+          "eval_files": {
+            "a": "6a2da2b52a59995244e89440bc9c77e07c0bc95c03bdea08faef7b71fb86df15"
+          },
+          "limit": {
+            "nodes": 50000
+          },
+          "options_a": {
+            "EvalFile": "candidate.nnue",
+            "Hash": 16,
+            "Threads": 1
+          },
+          "options_b": {
+            "Hash": 16,
+            "Threads": 1
+          },
+          "rounds": 5000,
+          "seed": 8,
+          "sprt": {
+            "alpha": 0.05,
+            "beta": 0.05,
+            "elo0": 0.0,
+            "elo1": 10.0
+          }
+        },
+        "machine": {
+          "cpu_model": "13th Gen Intel(R) Core(TM) i9-13900HX",
+          "fingerprint": "0de87b82166684bd698cd7595f7f44e0428917e86b4dbaf022f463b3034f0716",
+          "json": "{\"architecture\":\"x86_64\",\"cpu_model\":\"13th Gen Intel(R) Core(TM) i9-13900HX\",\"kernel\":\"7.0.0-38-generic\",\"logical_cpus\":32,\"os\":\"Linux-7.0.0-38-generic-x86_64-with-glibc2.39\"}",
+          "kernel": "7.0.0-38-generic",
+          "logical_cpus": 32,
+          "machine_id": 1,
+          "os": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39"
+        },
+        "run": {
+          "code_commit": "d82e1a3ba18d8d3f39df99a2bcdb96e758f0dd35",
+          "code_dirty": 0,
+          "conditions_json": "{\"checks\":[{\"detail\":\"clean\",\"name\":\"framework clean\",\"ok\":true},{\"detail\":\"c6c45e20ad5e15ad137bc3a0164b37e1dcf964e1\",\"name\":\"engine from a SHA\",\"ok\":true},{\"detail\":\"2013297 nodes now, 2013297 recorded\",\"name\":\"fingerprint\",\"ok\":true},{\"detail\":\"c6c45e20ad5e15ad137bc3a0164b37e1dcf964e1\",\"name\":\"engine from a SHA\",\"ok\":true},{\"detail\":\"2013297 nodes now, 2013297 recorded\",\"name\":\"fingerprint\",\"ok\":true},{\"detail\":\"8moves_v3.pgn: 5835239f88cc\",\"name\":\"dataset hash\",\"ok\":true},{\"detail\":\"meridian: passed\",\"name\":\"compliance\",\"ok\":true},{\"detail\":\"meridian: passed\",\"name\":\"compliance\",\"ok\":true}],\"samples\":[{\"at\":\"start\",\"frequency\":{\"khz_max\":4561374,\"khz_mean\":1335048,\"khz_min\":798907},\"governor\":\"powersave\",\"load_1min\":21.35546875,\"power_source\":\"ac\"},{\"at\":\"before\",\"frequency\":{\"khz_max\":3905150,\"khz_mean\":1209307,\"khz_min\":798287},\"governor\":\"powersave\",\"load_1min\":21.35546875,\"power_source\":\"ac\"},{\"at\":\"end\",\"frequency\":{\"khz_max\":4950006,\"khz_mean\":1092538,\"khz_min\":800000},\"governor\":\"powersave\",\"load_1min\":26.86279296875,\"power_source\":\"ac\"}]}",
+          "config": "default vs default",
+          "dataset_id": 4,
+          "engine_id": 11,
+          "finished_utc": "2026-11-01T03:52:44Z",
+          "grade": "verified",
+          "limits_json": "{\"b_engine_id\":11,\"concurrency\":30,\"eval_files\":{\"a\":\"6a2da2b52a59995244e89440bc9c77e07c0bc95c03bdea08faef7b71fb86df15\"},\"limit\":{\"nodes\":50000},\"options_a\":{\"EvalFile\":\"candidate.nnue\",\"Hash\":16,\"Threads\":1},\"options_b\":{\"Hash\":16,\"Threads\":1},\"rounds\":5000,\"seed\":8,\"sprt\":{\"alpha\":0.05,\"beta\":0.05,\"elo0\":0.0,\"elo1\":10.0}}",
+          "machine_id": 1,
+          "notes": null,
+          "protocol": "match",
+          "protocol_version": 2,
+          "run_id": "20261101T032616Z-match-34f78bde",
+          "schema_version": 2,
+          "seed": 8,
+          "started_utc": "2026-11-01T03:26:16Z",
+          "status": "complete",
+          "summary_json": "{\"draws\":3705,\"elo\":4.134678645703995,\"elo_high\":9.539088902664975,\"elo_low\":-1.2677314107736761,\"finished\":10000,\"games\":10000,\"losses\":3088,\"pairs\":5000,\"pentanomial\":[478,1094,1754,1179,495],\"score\":0.50595,\"score_high\":0.5137244040585812,\"score_low\":0.4981755959414188,\"sprt\":{\"agree\":true,\"alpha\":0.05,\"beta\":0.05,\"bounds\":[-2.9444389791664403,2.9444389791664403],\"elo0\":0.0,\"elo1\":10.0,\"fastchess_verdict\":\"continue\",\"llr\":-1.1638101998409431,\"verdict\":\"continue\"},\"terminations\":{\"normal\":10000},\"timed_out\":false,\"wins\":3207}",
+          "supersedes": null
+        },
+        "summary": {
+          "draws": 3705,
+          "elo": 4.134678645703995,
+          "elo_high": 9.539088902664975,
+          "elo_low": -1.2677314107736761,
+          "finished": 10000,
+          "games": 10000,
+          "losses": 3088,
+          "pairs": 5000,
+          "pentanomial": [
+            478,
+            1094,
+            1754,
+            1179,
+            495
+          ],
+          "score": 0.50595,
+          "score_high": 0.5137244040585812,
+          "score_low": 0.4981755959414188,
+          "sprt": {
+            "agree": true,
+            "alpha": 0.05,
+            "beta": 0.05,
+            "bounds": [
+              -2.9444389791664403,
+              2.9444389791664403
+            ],
+            "elo0": 0.0,
+            "elo1": 10.0,
+            "fastchess_verdict": "continue",
+            "llr": -1.1638101998409431,
+            "verdict": "continue"
+          },
+          "terminations": {
+            "normal": 10000
+          },
+          "timed_out": false,
+          "wins": 3207
+        }
+      },
+      {
+        "dataset": {
+          "dataset_id": 4,
+          "description_json": "{\"file\":\"8moves_v3.pgn\"}",
+          "name": "opening-book",
+          "sha256": "5835239f88cc2c7511b177c32392a69f3ede21819cf0616f80a7f907cd21d17e",
+          "version": "8moves_v3"
+        },
+        "engine": {
           "bench_nodes": 1882980,
           "binary_sha256": "de92d503e2c213aeacf7fee021045916d9254e3940bc6f67cb9d5d71dd13fe80",
           "build_json": "{\"build_type\":\"Release\",\"cmake_version\":\"cmake version 3.22.1\",\"compiler\":\"/usr/bin/c++\",\"compiler_version\":\"c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0\",\"cxx_flags_release\":\"-O3 -DNDEBUG\"}",
