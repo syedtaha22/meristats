@@ -1062,6 +1062,123 @@
           "version": "8moves_v3"
         },
         "engine": {
+          "bench_nodes": 2013297,
+          "binary_sha256": "86301d9b10ca881cbc8f942d922ee166b8bb52878dbf4e6b1bdb1966f6231fb2",
+          "build_json": "{\"build_type\":\"Release\",\"cmake_version\":\"cmake version 3.28.3\",\"compiler\":\"/usr/bin/c++\",\"compiler_version\":\"c++ (Ubuntu 12.4.0-2ubuntu1~24.04.1) 12.4.0\",\"cxx_flags_release\":\"-O3 -DNDEBUG\",\"defines\":{}}",
+          "commit_sha": "9c78330edc6db09a946e746ac9163887d0012888",
+          "engine_id": 12,
+          "kind": "meridian",
+          "name": "meridian",
+          "version_text": "Meridian 1.5.0"
+        },
+        "label": "Cycle 2026-11-01 21:53 UTC",
+        "limits": {
+          "b_engine_id": 12,
+          "concurrency": 30,
+          "eval_files": {
+            "a": "5613f125a3fa1b75260fc4ef22e0d1e1a37e9271e419852b4ac4ceba122bbf08"
+          },
+          "limit": {
+            "nodes": 50000
+          },
+          "options_a": {
+            "EvalFile": "candidate.nnue",
+            "Hash": 16,
+            "Threads": 1
+          },
+          "options_b": {
+            "Hash": 16,
+            "Threads": 1
+          },
+          "rounds": 5000,
+          "seed": 9,
+          "sprt": {
+            "alpha": 0.05,
+            "beta": 0.05,
+            "elo0": 0.0,
+            "elo1": 10.0
+          }
+        },
+        "machine": {
+          "cpu_model": "13th Gen Intel(R) Core(TM) i9-13900HX",
+          "fingerprint": "0de87b82166684bd698cd7595f7f44e0428917e86b4dbaf022f463b3034f0716",
+          "json": "{\"architecture\":\"x86_64\",\"cpu_model\":\"13th Gen Intel(R) Core(TM) i9-13900HX\",\"kernel\":\"7.0.0-38-generic\",\"logical_cpus\":32,\"os\":\"Linux-7.0.0-38-generic-x86_64-with-glibc2.39\"}",
+          "kernel": "7.0.0-38-generic",
+          "logical_cpus": 32,
+          "machine_id": 1,
+          "os": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39"
+        },
+        "run": {
+          "code_commit": "d82e1a3ba18d8d3f39df99a2bcdb96e758f0dd35",
+          "code_dirty": 0,
+          "conditions_json": "{\"checks\":[{\"detail\":\"clean\",\"name\":\"framework clean\",\"ok\":true},{\"detail\":\"9c78330edc6db09a946e746ac9163887d0012888\",\"name\":\"engine from a SHA\",\"ok\":true},{\"detail\":\"2013297 nodes now, 2013297 recorded\",\"name\":\"fingerprint\",\"ok\":true},{\"detail\":\"9c78330edc6db09a946e746ac9163887d0012888\",\"name\":\"engine from a SHA\",\"ok\":true},{\"detail\":\"2013297 nodes now, 2013297 recorded\",\"name\":\"fingerprint\",\"ok\":true},{\"detail\":\"8moves_v3.pgn: 5835239f88cc\",\"name\":\"dataset hash\",\"ok\":true},{\"detail\":\"meridian: passed\",\"name\":\"compliance\",\"ok\":true},{\"detail\":\"meridian: passed\",\"name\":\"compliance\",\"ok\":true}],\"samples\":[{\"at\":\"start\",\"frequency\":{\"khz_max\":3877450,\"khz_mean\":1124941,\"khz_min\":799524},\"governor\":\"powersave\",\"load_1min\":18.734375,\"power_source\":\"ac\"},{\"at\":\"before\",\"frequency\":{\"khz_max\":4147490,\"khz_mean\":1126065,\"khz_min\":800000},\"governor\":\"powersave\",\"load_1min\":18.734375,\"power_source\":\"ac\"},{\"at\":\"end\",\"frequency\":{\"khz_max\":5278709,\"khz_mean\":1048675,\"khz_min\":799635},\"governor\":\"powersave\",\"load_1min\":29.0625,\"power_source\":\"ac\"}]}",
+          "config": "default vs default",
+          "dataset_id": 4,
+          "engine_id": 12,
+          "finished_utc": "2026-11-02T04:11:23Z",
+          "grade": "verified",
+          "limits_json": "{\"b_engine_id\":12,\"concurrency\":30,\"eval_files\":{\"a\":\"5613f125a3fa1b75260fc4ef22e0d1e1a37e9271e419852b4ac4ceba122bbf08\"},\"limit\":{\"nodes\":50000},\"options_a\":{\"EvalFile\":\"candidate.nnue\",\"Hash\":16,\"Threads\":1},\"options_b\":{\"Hash\":16,\"Threads\":1},\"rounds\":5000,\"seed\":9,\"sprt\":{\"alpha\":0.05,\"beta\":0.05,\"elo0\":0.0,\"elo1\":10.0}}",
+          "machine_id": 1,
+          "notes": null,
+          "protocol": "match",
+          "protocol_version": 2,
+          "run_id": "20261102T035633Z-match-141a6223",
+          "schema_version": 2,
+          "seed": 9,
+          "started_utc": "2026-11-02T03:56:33Z",
+          "status": "complete",
+          "summary_json": "{\"draws\":2044,\"elo\":8.681313898072325,\"elo_high\":15.980753071921733,\"elo_low\":1.3895300486495779,\"finished\":5444,\"games\":5444,\"losses\":1632,\"pairs\":2720,\"pentanomial\":[219,629,945,647,280],\"score\":0.5124908155767818,\"score_high\":0.5229819473300946,\"score_low\":0.5019996838234689,\"sprt\":{\"agree\":true,\"alpha\":0.05,\"beta\":0.05,\"bounds\":[-2.9444389791664403,2.9444389791664403],\"elo0\":0.0,\"elo1\":10.0,\"fastchess_verdict\":\"H1\",\"llr\":2.9518853402958674,\"verdict\":\"H1\"},\"terminations\":{\"normal\":5444},\"timed_out\":false,\"wins\":1768}",
+          "supersedes": null
+        },
+        "summary": {
+          "draws": 2044,
+          "elo": 8.681313898072325,
+          "elo_high": 15.980753071921733,
+          "elo_low": 1.3895300486495779,
+          "finished": 5444,
+          "games": 5444,
+          "losses": 1632,
+          "pairs": 2720,
+          "pentanomial": [
+            219,
+            629,
+            945,
+            647,
+            280
+          ],
+          "score": 0.5124908155767818,
+          "score_high": 0.5229819473300946,
+          "score_low": 0.5019996838234689,
+          "sprt": {
+            "agree": true,
+            "alpha": 0.05,
+            "beta": 0.05,
+            "bounds": [
+              -2.9444389791664403,
+              2.9444389791664403
+            ],
+            "elo0": 0.0,
+            "elo1": 10.0,
+            "fastchess_verdict": "H1",
+            "llr": 2.9518853402958674,
+            "verdict": "H1"
+          },
+          "terminations": {
+            "normal": 5444
+          },
+          "timed_out": false,
+          "wins": 1768
+        }
+      },
+      {
+        "dataset": {
+          "dataset_id": 4,
+          "description_json": "{\"file\":\"8moves_v3.pgn\"}",
+          "name": "opening-book",
+          "sha256": "5835239f88cc2c7511b177c32392a69f3ede21819cf0616f80a7f907cd21d17e",
+          "version": "8moves_v3"
+        },
+        "engine": {
           "bench_nodes": 1882980,
           "binary_sha256": "de92d503e2c213aeacf7fee021045916d9254e3940bc6f67cb9d5d71dd13fe80",
           "build_json": "{\"build_type\":\"Release\",\"cmake_version\":\"cmake version 3.22.1\",\"compiler\":\"/usr/bin/c++\",\"compiler_version\":\"c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0\",\"cxx_flags_release\":\"-O3 -DNDEBUG\"}",
