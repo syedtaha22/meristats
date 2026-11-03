@@ -24,11 +24,11 @@ from the side to move. A fifth of the games, those whose number divides by 5, ar
 """
 
 import math
+import multiprocessing
 import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from multiprocessing import Pool
 from pathlib import Path
 
 import numpy as np
@@ -179,7 +179,7 @@ def read_dataset(
     kept = 0
     lines = skipped = 0
 
-    with Pool(workers) as pool:
+    with multiprocessing.get_context("forkserver").Pool(workers) as pool:
         for part in pool.imap(_convert, ranges):
             parts.append(part)
             kept += len(part[3])

@@ -229,21 +229,25 @@ for line in sys.stdin:
 
 
 @pytest.fixture
-def oracle(tmp_path, monkeypatch):
+def oracle(tmp_path):
     """
     Returns a function that takes the answers of an oracle engine (a map from the `position`
     command to the best move and the info lines) and returns the path of the program.
     """
     program = tmp_path / "oracle"
-    program.write_text(f"#!{sys.executable}\n" + ORACLE)
-    program.chmod(program.stat().st_mode | stat.S_IEXEC)
 
     def make(answers: dict) -> Path:
         import json
 
         file = tmp_path / "answers.json"
         file.write_text(json.dumps(answers))
-        monkeypatch.setenv("ORACLE_ANSWERS", str(file))
+        # The path is written into the program, because the processes of a run do not share the
+        # environment of the test.
+        program.write_text(
+            f"#!{sys.executable}\nimport os\nos.environ['ORACLE_ANSWERS'] = {str(file)!r}\n"
+            + ORACLE
+        )
+        program.chmod(program.stat().st_mode | stat.S_IEXEC)
         return program
 
     return make

@@ -20,6 +20,8 @@ import json
 import shutil
 import subprocess
 import sys
+import time
+from dataclasses import replace
 from pathlib import Path
 
 from meristats import (
@@ -341,6 +343,10 @@ def _run_positions(args, config: Config, store: Store) -> int:
         engine_config=args.engine_config,
         eval_file=args.eval_file,
         random_plies=args.random_plies,
+        min_random_plies=args.min_random_plies,
+        book=args.book,
+        book_share=args.book_share,
+        explore=args.explore,
         skip=args.skip,
         seed=args.seed,
         workers=args.workers,
@@ -419,6 +425,32 @@ def _train(args, config: Config, store: Store) -> int:
         publish=not args.no_publish,
         send_mail=not args.no_mail,
     )
+
+
+def _generate(args, config: Config, store: Store) -> int:
+    settings = cycle.Settings(
+        chunk_minutes=args.chunk_minutes,
+        selfplay_depth=args.selfplay_depth,
+        selfplay_skip=args.selfplay_skip,
+        seed=args.seed,
+        allow_dirty=args.allow_dirty,
+    )
+
+    try:
+        duration = session.seconds(args.duration) if args.duration else None
+    except ValueError as error:
+        raise cycle.CycleError(str(error)) from error
+
+    if duration is not None:
+        settings = replace(settings, deadline=time.time() + duration)
+
+    state = cycle.State.load(config.data_dir, settings.test_after)
+    summary = cycle.generate(config, store, settings, state, book=_book(config, None))
+    print(
+        f"{summary['positions']} positions from {summary['games']} games in {summary['chunks']} "
+        f"chunks, {summary['seconds']} s"
+    )
+    return 0
 
 
 def _release(args, config: Config, store: Store) -> int:
@@ -727,7 +759,7 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--selfplay-depth", type=int, default=cycle.Settings.selfplay_depth)
     train_parser.add_argument(
         "--selfplay-skip", type=int, default=cycle.Settings.selfplay_skip,
-        help="keep a position every N plies",
+        help="keep one position in N",
     )
     train_parser.add_argument("--epochs", type=int, default=cycle.Settings.epochs, help="at most")
     train_parser.add_argument(
@@ -746,6 +778,25 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--no-publish", action="store_true", help="leave the site alone")
     train_parser.add_argument("--no-mail", action="store_true", help="send no mail")
     train_parser.add_argument("--allow-dirty", action="store_true")
+    generate_parser = commands.add_parser(
+        "generate", help="generate self-play data for a time, or until Ctrl-C, and nothing else"
+    )
+    generate_parser.add_argument(
+        "duration", nargs="?", help="how long: 8h, 90m, 2d (default: until Ctrl-C)"
+    )
+    generate_parser.add_argument(
+        "--chunk-minutes", type=float, default=cycle.Settings.chunk_minutes,
+        help="the length of the self-play run that is stored as one chunk",
+    )
+    generate_parser.add_argument(
+        "--selfplay-depth", type=int, default=cycle.Settings.selfplay_depth
+    )
+    generate_parser.add_argument(
+        "--selfplay-skip", type=int, default=cycle.Settings.selfplay_skip,
+        help="keep one position in N",
+    )
+    generate_parser.add_argument("--seed", type=int, default=cycle.Settings.seed)
+    generate_parser.add_argument("--allow-dirty", action="store_true")
     release_parser = commands.add_parser(
         "release", help="one step of the release: check the App, sync the branch, promote, site"
     )
@@ -823,8 +874,21 @@ def build_parser() -> argparse.ArgumentParser:
     positions.add_argument("--depth", type=int, default=7)
     positions.add_argument("--engine-config", help="the Config option, such as full")
     positions.add_argument("--eval-file", type=Path, help="a network file, for the option EvalFile")
-    positions.add_argument("--random-plies", type=int, default=8)
-    positions.add_argument("--skip", type=int, default=3, help="keep a position every N plies")
+    positions.add_argument(
+        "--random-plies", type=int, default=8, help="at most this many random opening plies",
+    )
+    positions.add_argument(
+        "--min-random-plies", type=int, default=4, help="at least this many random opening plies",
+    )
+    positions.add_argument("--book", type=Path, help="a PGN file of openings")
+    positions.add_argument(
+        "--book-share", type=float, default=0.5, help="the share of games that start from the book",
+    )
+    positions.add_argument(
+        "--explore", type=float, default=0.1,
+        help="the chance of a near-best move other than the best in the first plies",
+    )
+    positions.add_argument("--skip", type=int, default=3, help="keep one position in N")
     positions.add_argument("--seed", type=int, default=1)
     positions.add_argument("--workers", type=int)
     positions.add_argument("--max-seconds", type=float, help="stop after this many seconds")
@@ -1028,6 +1092,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.out.write_text(nnue.source_text(nnue.read_network(args.network)))
             elif args.command == "train":
                 return _train(args, config, store)
+            elif args.command == "generate":
+                return _generate(args, config, store)
             elif args.command == "release":
                 return _release(args, config, store)
             elif args.command == "pin":

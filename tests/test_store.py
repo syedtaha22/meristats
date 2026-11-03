@@ -325,22 +325,25 @@ def test_the_same_blob_listed_twice_with_one_role_is_stored_once(store):
     ) == ["items", "pgn"]
 
 
+def _store_twice(path, queue):
+    try:
+        with Store(path) as shared:
+            ids = [shared.add_dataset("d", "1", "c" * 64, {}) for _ in range(20)]
+            blobs = [shared.put_blob(b"same bytes" * 100, "t").sha256 for _ in range(20)]
+            queue.put(("ok", set(ids), set(blobs)))
+    except Exception as error:
+        queue.put(("error", repr(error), None))
+
+
 def test_two_processes_storing_the_same_blob_and_dataset_do_not_clash(tmp_path):
     import multiprocessing
 
-    def work(queue):
-        try:
-            with Store(tmp_path / "shared") as shared:
-                ids = [shared.add_dataset("d", "1", "c" * 64, {}) for _ in range(20)]
-                blobs = [shared.put_blob(b"same bytes" * 100, "t").sha256 for _ in range(20)]
-                queue.put(("ok", set(ids), set(blobs)))
-        except Exception as error:
-            queue.put(("error", repr(error), None))
-
     Store(tmp_path / "shared").close()
-    context = multiprocessing.get_context("fork")
+    context = multiprocessing.get_context("forkserver")
     queue = context.Queue()
-    workers = [context.Process(target=work, args=(queue,)) for _ in range(4)]
+    workers = [
+        context.Process(target=_store_twice, args=(tmp_path / "shared", queue)) for _ in range(4)
+    ]
 
     for process in workers:
         process.start()

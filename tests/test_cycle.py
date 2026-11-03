@@ -293,3 +293,82 @@ def test_the_summary_is_written_as_text(config, tmp_path):
     text = cycle.format_summary(summary)
 
     assert "passed" in text and "Data: 6 positions" in text and "Match: 400 games" in text
+
+
+def test_generating_adds_chunks_to_the_buffer_until_the_deadline(config, tmp_path):
+    clock = [1000.0]
+    fakes = Fakes()
+    original = fakes.selfplay
+
+    def selfplay(*args, **kwargs):
+        clock[0] += 600
+        return original(*args, **kwargs)
+
+    fakes.selfplay = selfplay
+    state = cycle.State(test_after=5)
+    summary = cycle.generate(
+        config, None, cycle.Settings(deadline=2000), state, book=tmp_path / "b.pgn",
+        functions=fakes.functions(), progress=lambda t: None, clock=lambda: clock[0],
+    )
+    buffer = replay.Buffer(Path(config.data_dir) / "replay")
+
+    assert fakes.calls == ["build", "selfplay", "selfplay"]
+    assert fakes.selfplay_settings["max_seconds"] == 400
+    assert len(buffer.files(("selfplay",))) == 2
+    assert summary["chunks"] == 2 and summary["positions"] == 6 and summary["games"] == 4
+    assert cycle.State.load(config.data_dir, 1).chunks == 2
+
+
+def test_generating_gives_every_chunk_its_own_seed_and_the_book(config, tmp_path):
+    clock = [0.0]
+    fakes = Fakes()
+    original = fakes.selfplay
+
+    def selfplay(*args, **kwargs):
+        clock[0] += 600
+        return original(*args, **kwargs)
+
+    fakes.selfplay = selfplay
+    state = cycle.State(test_after=5, chunks=7)
+    cycle.generate(
+        config, None, cycle.Settings(deadline=1500), state, book=tmp_path / "b.pgn",
+        functions=fakes.functions(), progress=lambda t: None, clock=lambda: clock[0],
+    )
+
+    assert fakes.seeds == [8, 9, 10]
+    assert fakes.selfplay_settings["book"] == tmp_path / "b.pgn"
+
+
+def test_a_stop_while_generating_keeps_the_chunks_and_returns_the_counts(config, tmp_path):
+    fakes = Fakes()
+    fakes.interrupt_at = 3
+    messages = []
+    summary = cycle.generate(
+        config, None, cycle.Settings(), cycle.State(test_after=5), book=tmp_path / "b.pgn",
+        functions=fakes.functions(), progress=messages.append,
+    )
+    buffer = replay.Buffer(Path(config.data_dir) / "replay")
+
+    assert summary["chunks"] == 2 and summary["positions"] == 6
+    assert "stopped" in messages
+    assert len(buffer.files(("selfplay",))) == 2
+
+
+def test_a_chunk_that_ctrl_c_ended_is_kept_and_ends_the_generation(config, tmp_path):
+    fakes = Fakes()
+    original = fakes.selfplay
+
+    def selfplay(*args, **kwargs):
+        run_id, played = original(*args, **kwargs)
+        return run_id, {**played, "interrupted": len(fakes.seeds) == 2}
+
+    fakes.selfplay = selfplay
+    summary = cycle.generate(
+        config, None, cycle.Settings(), cycle.State(test_after=5), book=tmp_path / "b.pgn",
+        functions=fakes.functions(), progress=lambda t: None,
+    )
+    buffer = replay.Buffer(Path(config.data_dir) / "replay")
+
+    assert fakes.calls.count("selfplay") == 2
+    assert len(buffer.files(("selfplay",))) == 2
+    assert summary["chunks"] == 1

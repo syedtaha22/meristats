@@ -163,6 +163,103 @@ def count_positions(buffer: replay.Buffer, after: str) -> int:
     )
 
 
+def selfplay_chunk(
+    do: dict[str, Callable],
+    config: Config,
+    store: Store,
+    engine,
+    settings: "Settings",
+    state: "State",
+    buffer: replay.Buffer,
+    work: Path,
+    seconds: float,
+    book: Path,
+) -> dict:
+    """
+    Plays self-play games for `seconds`, adds the positions to the replay buffer as one chunk, and
+    returns the counts. The state keeps the number of chunks, so that every chunk has its own seed.
+    A chunk that Ctrl-C ended keeps its finished games, and the interrupt is raised after that.
+    """
+    out = work / "chunk.txt"
+    _, played = do["selfplay"](
+        config,
+        store,
+        engine,
+        out,
+        games=1_000_000,
+        depth=settings.selfplay_depth,
+        skip=settings.selfplay_skip,
+        book=settings.book or book,
+        seed=settings.seed + state.chunks,
+        max_seconds=seconds,
+        allow_dirty=settings.allow_dirty,
+    )
+    buffer.add("selfplay", f"{utc_stamp()}-{state.chunks:05d}", out.read_text())
+    out.unlink()
+
+    state.chunks += 1
+    state.save(config.data_dir)
+
+    if played.get("interrupted"):
+        raise KeyboardInterrupt
+
+    return played
+
+
+def generate(
+    config: Config,
+    store: Store,
+    settings: "Settings",
+    state: "State",
+    *,
+    book: Path,
+    functions: dict[str, Callable] | None = None,
+    progress: Callable[[str], None] = lambda text: print(text, flush=True),
+    clock: Callable[[], float] = time.time,
+) -> dict:
+    """
+    Plays self-play games with the engine of the networks branch, chunk after chunk, and adds the
+    positions to the replay buffer. It runs until the deadline of the settings, or until Ctrl-C
+    when there is none, and trains and tests nothing. Returns the counts.
+    """
+    do = functions or stages()
+    work = Path(config.data_dir) / "generate"
+    work.mkdir(parents=True, exist_ok=True)
+    buffer = replay.Buffer(Path(config.data_dir) / "replay")
+
+    engine = do["build"](config, store, config.networks_branch)
+    progress(f"engine: {engine.version_text} ({engine.commit_sha[:9]})")
+
+    started = clock()
+    summary = {"games": 0, "positions": 0, "chunks": 0, "seconds": 0}
+
+    try:
+        while True:
+            left = None if settings.deadline is None else settings.deadline - clock()
+
+            if left is not None and left < 30:
+                break
+
+            seconds = settings.chunk_minutes * 60 if left is None else min(
+                settings.chunk_minutes * 60, left)
+            played = selfplay_chunk(
+                do, config, store, engine, settings, state, buffer, work, seconds, book
+            )
+            summary["games"] += played["games"]
+            summary["positions"] += played["positions"]
+            summary["chunks"] += 1
+
+            progress(
+                f"data: {summary['positions']} positions from {summary['games']} games "
+                f"({summary['chunks']} chunks, {round(clock() - started)} s)"
+            )
+    except KeyboardInterrupt:
+        progress("stopped")
+
+    summary["seconds"] = round(clock() - started)
+    return summary
+
+
 def run(
     config: Config,
     store: Store,
@@ -213,23 +310,9 @@ def run(
 
             seconds = settings.chunk_minutes * 60 if left is None else min(
                 settings.chunk_minutes * 60, left)
-            out = work / "chunk.txt"
-            _, played = do["selfplay"](
-                config,
-                store,
-                engine,
-                out,
-                games=1_000_000,
-                depth=settings.selfplay_depth,
-                skip=settings.selfplay_skip,
-                seed=settings.seed + state.chunks,
-                max_seconds=seconds,
-                allow_dirty=settings.allow_dirty,
+            played = selfplay_chunk(
+                do, config, store, engine, settings, state, buffer, work, seconds, book
             )
-            buffer.add("selfplay", f"{utc_stamp()}-{state.chunks:05d}", out.read_text())
-            out.unlink()
-            state.chunks += 1
-            state.save(config.data_dir)
             games += played["games"]
             positions += played["positions"]
             chunks += 1

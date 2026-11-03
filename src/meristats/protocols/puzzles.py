@@ -181,12 +181,12 @@ def _start_engine(binary: str, options: dict, config: str | None) -> tuple[UciEn
     return uci, replies
 
 
-def _init_worker(binary, options, config, puzzles, limit):
+def _init_worker(binary, options, config, dataset_path, items, limit):
     _STATE.update(
         binary=binary,
         options=options,
         config=config,
-        puzzles=puzzles,
+        puzzles=datasets.load_puzzles(Path(dataset_path), items),
         limit=limit,
         uci=None,
         errors=0,
@@ -447,11 +447,13 @@ def run(
     context.checks += require(checks)
     context.sample("before")
     spans = [(start, min(start + CHUNK, len(puzzles))) for start in range(0, len(puzzles), CHUNK)]
-    ctx = multiprocessing.get_context("fork")
+    ctx = multiprocessing.get_context("forkserver")
     results: list[Item] = []
 
     with ctx.Pool(
-        workers, _init_worker, (str(engine.binary), options, engine_config, puzzles, limit)
+        workers,
+        _init_worker,
+        (str(engine.binary), options, engine_config, str(dataset_path), items, limit),
     ) as pool:
         done, step = 0, max(1, len(puzzles) // 20)
 

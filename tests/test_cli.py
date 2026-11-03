@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import time
 import shutil
 from pathlib import Path
 
@@ -905,3 +906,28 @@ def test_training_takes_a_duration_or_none_and_the_settings_of_a_cycle():
     assert timed.duration == "8h" and timed.test_after == 123 and timed.no_publish
     assert open_ended.duration is None and open_ended.patience == 1
     assert parser.parse_args(["release", "promote", "s.json"]).action == "promote"
+
+
+def test_generating_takes_a_duration_or_none_and_the_settings_of_the_self_play():
+    parser = cli.build_parser()
+    timed = parser.parse_args(["generate", "8h", "--selfplay-depth", "7", "--chunk-minutes", "5"])
+    open_ended = parser.parse_args(["generate"])
+
+    assert timed.duration == "8h" and timed.selfplay_depth == 7 and timed.chunk_minutes == 5
+    assert open_ended.duration is None and open_ended.selfplay_skip == 3
+
+
+def test_generate_runs_the_generation_with_a_deadline_and_prints_the_counts(
+    stubbed, config_file, tmp_path, capsys
+):
+    stubbed.setattr(cli.external, "fetch_book", lambda cache: tmp_path / "book.pgn")
+    recorder = Recorder({"games": 4, "positions": 90, "chunks": 2, "seconds": 61})
+    stubbed.setattr(cli.cycle, "generate", recorder)
+
+    assert run_main(config_file, "generate", "2h") == 0
+    ((args, kwargs),) = recorder.calls
+    settings = args[2]
+
+    assert 7100 < settings.deadline - time.time() <= 7200
+    assert kwargs["book"] == tmp_path / "book.pgn"
+    assert "90 positions from 4 games in 2 chunks, 61 s" in capsys.readouterr().out
