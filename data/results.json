@@ -1,5 +1,5 @@
 {
-  "generator": "meristats 0.5.2",
+  "generator": "meristats 0.7.0",
   "pages": {
     "matches": [
       {
@@ -115,6 +115,217 @@
             "normal": 3000
           },
           "wins": 937
+        }
+      },
+      {
+        "dataset": {
+          "dataset_id": 4,
+          "description_json": "{\"file\":\"8moves_v3.pgn\"}",
+          "name": "opening-book",
+          "sha256": "5835239f88cc2c7511b177c32392a69f3ede21819cf0616f80a7f907cd21d17e",
+          "version": "8moves_v3"
+        },
+        "engine": {
+          "bench_nodes": 1853402,
+          "binary_sha256": "3cb1b88df2cfaba7edffa9b55c453e0652abd0fbc579a9c2b6cbef7d57b0c55d",
+          "build_json": "{\"build_type\":\"Release\",\"cmake_version\":\"cmake version 3.28.3\",\"compiler\":\"/usr/bin/c++\",\"compiler_version\":\"c++ (Ubuntu 12.4.0-2ubuntu1~24.04.1) 12.4.0\",\"cxx_flags_release\":\"-O3 -DNDEBUG\",\"defines\":{}}",
+          "commit_sha": "323f01d5982e4d31af949d2dad60076f86e00919",
+          "engine_id": 14,
+          "kind": "meridian",
+          "name": "meridian",
+          "version_text": "Meridian 1.6.0"
+        },
+        "label": "1.6.0 against 1.5.0, 50 ms",
+        "limits": {
+          "b_engine_id": 12,
+          "concurrency": 30,
+          "eval_files": {},
+          "limit": {
+            "st": 0.05
+          },
+          "options_a": {
+            "Hash": 16,
+            "MoveOverhead": 0,
+            "Threads": 1
+          },
+          "options_b": {
+            "Hash": 16,
+            "MoveOverhead": 0,
+            "Threads": 1
+          },
+          "rounds": 1500,
+          "seed": 1,
+          "sprt": null
+        },
+        "machine": {
+          "cpu_model": "13th Gen Intel(R) Core(TM) i9-13900HX",
+          "fingerprint": "0de87b82166684bd698cd7595f7f44e0428917e86b4dbaf022f463b3034f0716",
+          "json": "{\"architecture\":\"x86_64\",\"cpu_model\":\"13th Gen Intel(R) Core(TM) i9-13900HX\",\"kernel\":\"7.0.0-38-generic\",\"logical_cpus\":32,\"os\":\"Linux-7.0.0-38-generic-x86_64-with-glibc2.39\"}",
+          "kernel": "7.0.0-38-generic",
+          "logical_cpus": 32,
+          "machine_id": 1,
+          "os": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39"
+        },
+        "run": {
+          "code_commit": "8fed2d13a4e30e500b94acd49cd4f9b68df17bdb",
+          "code_dirty": 0,
+          "conditions_json": "{\"checks\":[{\"detail\":\"clean\",\"name\":\"framework clean\",\"ok\":true},{\"detail\":\"323f01d5982e4d31af949d2dad60076f86e00919\",\"name\":\"engine from a SHA\",\"ok\":true},{\"detail\":\"1853402 nodes now, 1853402 recorded\",\"name\":\"fingerprint\",\"ok\":true},{\"detail\":\"9c78330edc6db09a946e746ac9163887d0012888\",\"name\":\"engine from a SHA\",\"ok\":true},{\"detail\":\"2013297 nodes now, 2013297 recorded\",\"name\":\"fingerprint\",\"ok\":true},{\"detail\":\"8moves_v3.pgn: 5835239f88cc\",\"name\":\"dataset hash\",\"ok\":true},{\"detail\":\"meridian: passed\",\"name\":\"compliance\",\"ok\":true},{\"detail\":\"meridian: passed\",\"name\":\"compliance\",\"ok\":true}],\"samples\":[{\"at\":\"start\",\"frequency\":{\"khz_max\":4188486,\"khz_mean\":1269861,\"khz_min\":798934},\"governor\":\"powersave\",\"load_1min\":12.669921875,\"power_source\":\"ac\"},{\"at\":\"before\",\"frequency\":{\"khz_max\":4029264,\"khz_mean\":1252379,\"khz_min\":799684},\"governor\":\"powersave\",\"load_1min\":12.669921875,\"power_source\":\"ac\"},{\"at\":\"end\",\"frequency\":{\"khz_max\":4923189,\"khz_mean\":1173617,\"khz_min\":800000},\"governor\":\"powersave\",\"load_1min\":25.67822265625,\"power_source\":\"ac\"}]}",
+          "config": "default vs default",
+          "dataset_id": 4,
+          "engine_id": 14,
+          "finished_utc": "2026-11-06T13:59:39Z",
+          "grade": "verified",
+          "limits_json": "{\"b_engine_id\":12,\"concurrency\":30,\"eval_files\":{},\"limit\":{\"st\":0.05},\"options_a\":{\"Hash\":16,\"MoveOverhead\":0,\"Threads\":1},\"options_b\":{\"Hash\":16,\"MoveOverhead\":0,\"Threads\":1},\"rounds\":1500,\"seed\":1,\"sprt\":null}",
+          "machine_id": 1,
+          "notes": null,
+          "protocol": "match",
+          "protocol_version": 2,
+          "run_id": "20261106T135154Z-match-68600c78",
+          "schema_version": 2,
+          "seed": 1,
+          "started_utc": "2026-11-06T13:51:54Z",
+          "status": "complete",
+          "summary_json": "{\"draws\":1074,\"elo\":89.9759306373993,\"elo_high\":100.15245449647712,\"elo_low\":79.9482639481166,\"finished\":3000,\"games\":3000,\"losses\":583,\"pairs\":1500,\"pentanomial\":[49,219,463,461,308],\"score\":0.6266666666666667,\"score_high\":0.6402671576882826,\"score_low\":0.6130661756450508,\"terminations\":{\"normal\":3000},\"timed_out\":false,\"wins\":1343}",
+          "supersedes": null
+        },
+        "summary": {
+          "draws": 1074,
+          "elo": 89.9759306373993,
+          "elo_high": 100.15245449647712,
+          "elo_low": 79.9482639481166,
+          "finished": 3000,
+          "games": 3000,
+          "losses": 583,
+          "pairs": 1500,
+          "pentanomial": [
+            49,
+            219,
+            463,
+            461,
+            308
+          ],
+          "score": 0.6266666666666667,
+          "score_high": 0.6402671576882826,
+          "score_low": 0.6130661756450508,
+          "terminations": {
+            "normal": 3000
+          },
+          "timed_out": false,
+          "wins": 1343
+        }
+      },
+      {
+        "dataset": {
+          "dataset_id": 4,
+          "description_json": "{\"file\":\"8moves_v3.pgn\"}",
+          "name": "opening-book",
+          "sha256": "5835239f88cc2c7511b177c32392a69f3ede21819cf0616f80a7f907cd21d17e",
+          "version": "8moves_v3"
+        },
+        "engine": {
+          "bench_nodes": 1853402,
+          "binary_sha256": "3cb1b88df2cfaba7edffa9b55c453e0652abd0fbc579a9c2b6cbef7d57b0c55d",
+          "build_json": "{\"build_type\":\"Release\",\"cmake_version\":\"cmake version 3.28.3\",\"compiler\":\"/usr/bin/c++\",\"compiler_version\":\"c++ (Ubuntu 12.4.0-2ubuntu1~24.04.1) 12.4.0\",\"cxx_flags_release\":\"-O3 -DNDEBUG\",\"defines\":{}}",
+          "commit_sha": "323f01d5982e4d31af949d2dad60076f86e00919",
+          "engine_id": 14,
+          "kind": "meridian",
+          "name": "meridian",
+          "version_text": "Meridian 1.6.0"
+        },
+        "label": "1.6.0 against 1.5.0, 50000 nodes",
+        "limits": {
+          "b_engine_id": 12,
+          "concurrency": 30,
+          "eval_files": {},
+          "limit": {
+            "nodes": 50000
+          },
+          "options_a": {
+            "Hash": 16,
+            "Threads": 1
+          },
+          "options_b": {
+            "Hash": 16,
+            "Threads": 1
+          },
+          "rounds": 1500,
+          "seed": 1,
+          "sprt": {
+            "alpha": 0.05,
+            "beta": 0.05,
+            "elo0": 0.0,
+            "elo1": 10.0
+          }
+        },
+        "machine": {
+          "cpu_model": "13th Gen Intel(R) Core(TM) i9-13900HX",
+          "fingerprint": "0de87b82166684bd698cd7595f7f44e0428917e86b4dbaf022f463b3034f0716",
+          "json": "{\"architecture\":\"x86_64\",\"cpu_model\":\"13th Gen Intel(R) Core(TM) i9-13900HX\",\"kernel\":\"7.0.0-38-generic\",\"logical_cpus\":32,\"os\":\"Linux-7.0.0-38-generic-x86_64-with-glibc2.39\"}",
+          "kernel": "7.0.0-38-generic",
+          "logical_cpus": 32,
+          "machine_id": 1,
+          "os": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39"
+        },
+        "run": {
+          "code_commit": "8fed2d13a4e30e500b94acd49cd4f9b68df17bdb",
+          "code_dirty": 0,
+          "conditions_json": "{\"checks\":[{\"detail\":\"clean\",\"name\":\"framework clean\",\"ok\":true},{\"detail\":\"323f01d5982e4d31af949d2dad60076f86e00919\",\"name\":\"engine from a SHA\",\"ok\":true},{\"detail\":\"1853402 nodes now, 1853402 recorded\",\"name\":\"fingerprint\",\"ok\":true},{\"detail\":\"9c78330edc6db09a946e746ac9163887d0012888\",\"name\":\"engine from a SHA\",\"ok\":true},{\"detail\":\"2013297 nodes now, 2013297 recorded\",\"name\":\"fingerprint\",\"ok\":true},{\"detail\":\"8moves_v3.pgn: 5835239f88cc\",\"name\":\"dataset hash\",\"ok\":true},{\"detail\":\"meridian: passed\",\"name\":\"compliance\",\"ok\":true},{\"detail\":\"meridian: passed\",\"name\":\"compliance\",\"ok\":true}],\"samples\":[{\"at\":\"start\",\"frequency\":{\"khz_max\":3885042,\"khz_mean\":1126669,\"khz_min\":799355},\"governor\":\"powersave\",\"load_1min\":1.5419921875,\"power_source\":\"ac\"},{\"at\":\"before\",\"frequency\":{\"khz_max\":3900021,\"khz_mean\":1088589,\"khz_min\":798996},\"governor\":\"powersave\",\"load_1min\":1.5419921875,\"power_source\":\"ac\"},{\"at\":\"end\",\"frequency\":{\"khz_max\":4305037,\"khz_mean\":1018174,\"khz_min\":800000},\"governor\":\"powersave\",\"load_1min\":13.68603515625,\"power_source\":\"ac\"}]}",
+          "config": "default vs default",
+          "dataset_id": 4,
+          "engine_id": 14,
+          "finished_utc": "2026-11-06T13:51:53Z",
+          "grade": "verified",
+          "limits_json": "{\"b_engine_id\":12,\"concurrency\":30,\"eval_files\":{},\"limit\":{\"nodes\":50000},\"options_a\":{\"Hash\":16,\"Threads\":1},\"options_b\":{\"Hash\":16,\"Threads\":1},\"rounds\":1500,\"seed\":1,\"sprt\":{\"alpha\":0.05,\"beta\":0.05,\"elo0\":0.0,\"elo1\":10.0}}",
+          "machine_id": 1,
+          "notes": null,
+          "protocol": "match",
+          "protocol_version": 2,
+          "run_id": "20261106T135108Z-match-66726b84",
+          "schema_version": 2,
+          "seed": 1,
+          "started_utc": "2026-11-06T13:51:08Z",
+          "status": "complete",
+          "summary_json": "{\"draws\":71,\"elo\":187.85329333084496,\"elo_high\":230.12416867168633,\"elo_low\":150.1321519638018,\"finished\":231,\"games\":231,\"losses\":23,\"pairs\":112,\"pentanomial\":[2,6,21,46,37],\"score\":0.7467532467532467,\"score_high\":0.7899628004885694,\"score_low\":0.7035436930179241,\"sprt\":{\"agree\":true,\"alpha\":0.05,\"beta\":0.05,\"bounds\":[-2.9444389791664403,2.9444389791664403],\"elo0\":0.0,\"elo1\":10.0,\"fastchess_verdict\":\"H1\",\"llr\":6.408355008285253,\"verdict\":\"H1\"},\"terminations\":{\"normal\":231},\"timed_out\":false,\"wins\":137}",
+          "supersedes": null
+        },
+        "summary": {
+          "draws": 71,
+          "elo": 187.85329333084496,
+          "elo_high": 230.12416867168633,
+          "elo_low": 150.1321519638018,
+          "finished": 231,
+          "games": 231,
+          "losses": 23,
+          "pairs": 112,
+          "pentanomial": [
+            2,
+            6,
+            21,
+            46,
+            37
+          ],
+          "score": 0.7467532467532467,
+          "score_high": 0.7899628004885694,
+          "score_low": 0.7035436930179241,
+          "sprt": {
+            "agree": true,
+            "alpha": 0.05,
+            "beta": 0.05,
+            "bounds": [
+              -2.9444389791664403,
+              2.9444389791664403
+            ],
+            "elo0": 0.0,
+            "elo1": 10.0,
+            "fastchess_verdict": "H1",
+            "llr": 6.408355008285253,
+            "verdict": "H1"
+          },
+          "terminations": {
+            "normal": 231
+          },
+          "timed_out": false,
+          "wins": 137
         }
       },
       {
