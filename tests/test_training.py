@@ -216,6 +216,19 @@ def test_a_network_can_be_the_start_of_a_training(torch, tmp_path):
     assert second.epochs[0]["held"] <= first.best_held * 1.2
 
 
+def test_a_squared_training_gives_a_squared_network_that_a_training_from_it_keeps(torch, tmp_path):
+    data = small_data(tmp_path)
+    first = training.train(
+        data, epochs=3, batch=64, lr=0.01, hidden=16, squared=True, device="cpu", log=lambda t: None
+    )
+    second = training.train(
+        data, epochs=1, batch=64, lr=0.0001, init=first.network, device="cpu", log=lambda t: None
+    )
+
+    assert first.network.squared and second.network.squared
+    assert first.quantized_difference < 5 + 0.05 * first.quantized_magnitude
+
+
 def test_too_few_positions_are_an_error(torch, tmp_path):
     data = small_data(tmp_path, count=40)
 

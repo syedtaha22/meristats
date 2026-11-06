@@ -239,13 +239,15 @@ def train(
     log: Callable[[str], None] = print,
     seconds_loading: float = 0.0,
     patience: int = 0,
+    squared: bool = False,
 ) -> Result:
     """
     Trains a network with Adam on the positions that are not held out, and keeps the weights of the
     epoch with the lowest held-out error. The learning rate falls from `lr` to a tenth of it over
     the epochs. With a `patience` above 0 the training stops after that many epochs without a new
     lowest held-out error. Returns the best network, quantized, and the held-out error of the
-    starting weights.
+    starting weights. With `squared` the clipped values are squared before the output layer, and a
+    training that starts from `init` keeps the activation of `init`.
     """
     import torch
     import torch.nn.functional as functional
@@ -270,6 +272,7 @@ def train(
     pad = nnue.INPUTS
 
     if init is not None:
+        squared = init.squared
         w0, b0, wo0, bo0 = (torch.from_numpy(a) for a in nnue.to_float(init))
         hidden = init.hidden
         w = torch.cat([w0, torch.zeros(1, hidden)]).to(device)
@@ -305,6 +308,10 @@ def train(
         first = (side == 0).unsqueeze(1)
         us = torch.where(first, acc_white, acc_black).clamp(0, 1)
         them = torch.where(first, acc_black, acc_white).clamp(0, 1)
+
+        if squared:
+            us, them = us * us, them * them
+
         bucket = ((count[rows].long() - 2) // (32 // nnue.BUCKETS)).clamp(0, nnue.BUCKETS - 1)
         weights = wo[bucket]
         return (us * weights[:, 0]).sum(1) + (them * weights[:, 1]).sum(1) + bo[bucket]
@@ -375,11 +382,11 @@ def train(
 
     training_seconds = time.monotonic() - started
     network = nnue.quantize(
-        best_state[0][: nnue.INPUTS], best_state[1], best_state[2], best_state[3]
+        best_state[0][: nnue.INPUTS], best_state[1], best_state[2], best_state[3], squared
     )
     result = Result(network, best, history, seconds_loading, training_seconds, device)
     result.start_held = start_held
-    _compare(result, best_state, data.held_fens)
+    _compare(result, best_state, data.held_fens, squared)
     log(
         f"quantized against float: mean difference {result.quantized_difference:.2f}cp over "
         f"{result.checked} positions (mean magnitude {result.quantized_magnitude:.1f}cp)"
@@ -388,7 +395,9 @@ def train(
     return result
 
 
-def _compare(result: Result, state: list[np.ndarray], fens: list[str]) -> None:
+def _compare(
+    result: Result, state: list[np.ndarray], fens: list[str], squared: bool = False
+) -> None:
     """
     The integer network against the floating point one on held-out positions.
     """
@@ -407,7 +416,7 @@ def _compare(result: Result, state: list[np.ndarray], fens: list[str]) -> None:
             for piece, square in pieces:
                 total += w[nnue.king_feature(perspective, piece, square, bucket, mirror)]
 
-            accumulators.append(np.clip(total, 0, 1))
+            accumulators.append(np.clip(total, 0, 1) ** (2 if squared else 1))
 
         layer = nnue.bucket_of(len(pieces))
         output = (

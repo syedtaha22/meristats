@@ -206,7 +206,8 @@ def test_the_source_has_the_layout_of_the_file_of_the_engine():
     assert lines[0].startswith("// A network written by meristats: 1536 inputs, 4 values")
     assert "constexpr int16_t kBuiltinFeatureWeights[] = {" in text
     assert "    -10, -1, 18, -6, 0, 0, 0, 0, 0, 0, 0, 0," in lines
-    assert text.endswith("constexpr int32_t kBuiltinOutputBias[] = {0, 1, 2, 3, 4, 5, 6, 7};\n")
+    assert "constexpr int32_t kBuiltinOutputBias[] = {0, 1, 2, 3, 4, 5, 6, 7};" in lines
+    assert text.endswith("constexpr bool kBuiltinSquared = false;\n")
     assert all(len(line) <= 100 for line in lines)
 
 
@@ -237,20 +238,27 @@ def test_the_integer_evaluation_equals_the_engine_exactly(tmp_path, monkeypatch)
 
     monkeypatch.setattr(job, "TOOLS", (*job.TOOLS, "nnue_eval"))
     program = job.build_tool(config, engine, "nnue_eval", Path(__file__).parent / "cpp")
-    network = tmp_path / "net.nnue"
-    nnue.write_network(random_network(seed=4), network)
     fens = positions(300, seed=7) + [
         START,
         "4k3/8/8/8/8/8/8/4K3 b - - 0 1",
     ]
-    done = subprocess.run(
-        [str(program), str(network)], input="\n".join(fens) + "\n", capture_output=True, text=True
-    )
-    engine_values = [int(line) for line in done.stdout.split()]
-    mine = [nnue.evaluate(nnue.read_network(network), fen) for fen in fens]
 
-    assert done.returncode == 0 and len(engine_values) == len(fens)
-    assert engine_values == mine and len(set(mine)) > 50
+    for squared in (False, True):
+        network = tmp_path / f"net-{squared}.nnue"
+        random = random_network(seed=4)
+        random.squared = squared
+        nnue.write_network(random, network)
+        done = subprocess.run(
+            [str(program), str(network)],
+            input="\n".join(fens) + "\n",
+            capture_output=True,
+            text=True,
+        )
+        engine_values = [int(line) for line in done.stdout.split()]
+        mine = [nnue.evaluate(nnue.read_network(network), fen) for fen in fens]
+
+        assert done.returncode == 0 and len(engine_values) == len(fens)
+        assert engine_values == mine and len(set(mine)) > 50
 
     with UciEngine(engine.binary).start() as uci:
         replies = uci.set_option("EvalFile", str(network))
@@ -318,3 +326,52 @@ def test_a_source_without_the_arrays_is_refused(tmp_path):
 
     with pytest.raises(nnue.NetworkError):
         nnue.read_source(path)
+
+
+def test_a_squared_network_squares_the_clipped_values_and_divides_by_64():
+    network = blank(hidden=4)
+    network.squared = True
+    network.feature_bias[:] = [100, 255, 400, -5]
+    network.output_weights[:, 0, :] = 64
+    network.output_bias[:] = 0
+
+    # The clipped values are 100, 255, 255 and 0. Their squares divided by 64 are 156, 1016, 1016
+    # and 0, which add up to 2188 times the weight 64.
+    total = (100 * 100 >> 6) + 2 * (255 * 255 >> 6)
+    scale = (nnue.QUANT_INPUT * nnue.QUANT_INPUT >> 6) * nnue.QUANT_OUTPUT
+    expected = total * 64 * nnue.OUTPUT_SCALE // scale
+
+    assert nnue.evaluate(network, START) == expected
+
+
+def test_the_activation_of_a_network_is_kept_by_its_file_and_its_source(tmp_path):
+    for squared in (False, True):
+        network = random_network(3)
+        network.squared = squared
+        path = tmp_path / f"net-{squared}.nnue"
+        nnue.write_network(network, path)
+        source = tmp_path / f"net-{squared}.inc"
+        source.write_text(nnue.source_text(network))
+
+        assert path.read_bytes()[:8] == (nnue.MAGIC_SQUARED if squared else nnue.MAGIC)
+        assert nnue.read_network(path).squared is squared
+        assert nnue.read_source(source).squared is squared
+
+
+def test_a_source_without_the_activation_is_read_as_not_squared(tmp_path):
+    source = tmp_path / "old.inc"
+    source.write_text(
+        nnue.source_text(random_network(2)).replace("constexpr bool kBuiltinSquared = false;\n", "")
+    )
+
+    assert nnue.read_source(source).squared is False
+
+
+def test_a_squared_network_comes_back_from_floats_with_the_scale_of_its_squares():
+    network = random_network(5)
+    network.squared = True
+    again = nnue.quantize(*nnue.to_float(network), squared=True)
+
+    assert again.squared is True
+    assert np.array_equal(again.output_bias, network.output_bias)
+    assert np.array_equal(again.output_weights, network.output_weights)

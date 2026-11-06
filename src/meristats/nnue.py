@@ -29,6 +29,8 @@ from pathlib import Path
 import numpy as np
 
 MAGIC = b"MRDNNUE3"
+MAGIC_SQUARED = b"MRDNNUE4"
+SQUARE_SHIFT = 6
 BASE_INPUTS = 768
 KING_BUCKETS = 2
 INPUTS = BASE_INPUTS * KING_BUCKETS
@@ -56,10 +58,19 @@ class Network:
     feature_bias: np.ndarray  # int16, hidden
     output_weights: np.ndarray  # int16, BUCKETS x 2 x hidden
     output_bias: np.ndarray  # int32, BUCKETS
+    squared: bool = False  # whether the clipped values are squared before the output layer
 
     @property
     def hidden(self) -> int:
         return self.feature_bias.shape[0]
+
+
+def activation_scale(squared: bool) -> int:
+    """
+    The scale of the values that reach the output layer: the clipped accumulator, or its square
+    divided by 2^SQUARE_SHIFT.
+    """
+    return (QUANT_INPUT * QUANT_INPUT) >> SQUARE_SHIFT if squared else QUANT_INPUT
 
 
 def king_context(perspective: int, king_square: int) -> tuple[int, int]:
@@ -187,7 +198,7 @@ def read_network(path: Path) -> Network:
     """
     data = Path(path).read_bytes()
 
-    if data[:8] != MAGIC:
+    if data[:8] not in (MAGIC, MAGIC_SQUARED):
         raise NetworkError(f"{path} is not a network file")
 
     inputs, hidden, quant_input, quant_output, output_scale, buckets = struct.unpack(
@@ -216,7 +227,9 @@ def read_network(path: Path) -> Network:
     output = np.frombuffer(data, np.int16, BUCKETS * 2 * hidden, offset).reshape(BUCKETS, 2, hidden)
     offset += 2 * BUCKETS * 2 * hidden
     output_bias = np.frombuffer(data, np.int32, BUCKETS, offset)
-    return Network(weights.copy(), bias.copy(), output.copy(), output_bias.copy())
+    return Network(
+        weights.copy(), bias.copy(), output.copy(), output_bias.copy(), data[:8] == MAGIC_SQUARED
+    )
 
 
 def write_network(network: Network, path: Path) -> None:
@@ -227,7 +240,7 @@ def write_network(network: Network, path: Path) -> None:
         "<6i", INPUTS, network.hidden, QUANT_INPUT, QUANT_OUTPUT, OUTPUT_SCALE, BUCKETS
     )
     Path(path).write_bytes(
-        MAGIC
+        (MAGIC_SQUARED if network.squared else MAGIC)
         + header
         + network.feature_weights.astype("<i2").tobytes()
         + network.feature_bias.astype("<i2").tobytes()
@@ -258,13 +271,17 @@ def evaluate(network: Network, fen: str) -> int:
         accumulators.append(np.clip(total, 0, QUANT_INPUT))
 
     us, them = accumulators[side], accumulators[1 - side]
+
+    if network.squared:
+        us, them = (us * us) >> SQUARE_SHIFT, (them * them) >> SQUARE_SHIFT
+
     layer = bucket_of(len(pieces))
     total = int(network.output_bias[layer])
     total += int(us @ network.output_weights[layer, 0].astype(np.int64))
     total += int(them @ network.output_weights[layer, 1].astype(np.int64))
     # C++ integer division truncates toward zero.
     scaled = total * OUTPUT_SCALE
-    quotient = abs(scaled) // (QUANT_INPUT * QUANT_OUTPUT)
+    quotient = abs(scaled) // (activation_scale(network.squared) * QUANT_OUTPUT)
     return quotient if scaled >= 0 else -quotient
 
 
@@ -273,24 +290,27 @@ def quantize(
     feature_bias: np.ndarray,
     output_weights: np.ndarray,
     output_bias: np.ndarray,
+    squared: bool = False,
 ) -> Network:
     """
     Turns floating point weights into the integers of a network. The accumulator has the scale
     QUANT_INPUT, the weights of the output layer have the scale QUANT_OUTPUT, and a value rounds
-    half away from zero, as the engine's tools round.
+    half away from zero, as the engine's tools round. A squared network has the scale of its
+    squares at the output layer.
     """
 
     def scaled(values: np.ndarray, scale: float) -> np.ndarray:
         x = values.astype(np.float64) * scale
         return np.clip(np.sign(x) * np.floor(np.abs(x) + 0.5), -32767, 32767).astype(np.int16)
 
-    x = output_bias.astype(np.float64) * QUANT_INPUT * QUANT_OUTPUT
+    x = output_bias.astype(np.float64) * activation_scale(squared) * QUANT_OUTPUT
     bias = (np.sign(x) * np.floor(np.abs(x) + 0.5)).astype(np.int32)
     return Network(
         scaled(feature_weights, QUANT_INPUT),
         scaled(feature_bias, QUANT_INPUT),
         scaled(output_weights, QUANT_OUTPUT),
         bias,
+        squared,
     )
 
 
@@ -302,7 +322,8 @@ def to_float(network: Network) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.n
         network.feature_weights.astype(np.float32) / QUANT_INPUT,
         network.feature_bias.astype(np.float32) / QUANT_INPUT,
         network.output_weights.astype(np.float32) / QUANT_OUTPUT,
-        network.output_bias.astype(np.float32) / (QUANT_INPUT * QUANT_OUTPUT),
+        network.output_bias.astype(np.float32)
+        / (activation_scale(network.squared) * QUANT_OUTPUT),
     )
 
 
@@ -328,7 +349,8 @@ def source_text(network: Network) -> str:
         + numbers("kBuiltinOutputWeights", network.output_weights)
         + "constexpr int32_t kBuiltinOutputBias[] = {"
         + ", ".join(str(int(v)) for v in network.output_bias)
-        + "};\n"
+        + "};\n\n"
+        + f"constexpr bool kBuiltinSquared = {'true' if network.squared else 'false'};\n"
     )
 
 
@@ -356,9 +378,11 @@ def read_source(path: Path) -> Network:
     if weights.shape[0] != INPUTS * hidden or output.shape[0] != BUCKETS * 2 * hidden:
         raise NetworkError(f"{path} has arrays that do not fit one network")
 
+    squared = re.search(r"kBuiltinSquared\s*=\s*true", text) is not None
     return Network(
         weights.astype(np.int16).reshape(INPUTS, hidden),
         bias.astype(np.int16),
         output.astype(np.int16).reshape(BUCKETS, 2, hidden),
         output_bias.astype(np.int32),
+        squared,
     )
